@@ -15,7 +15,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Language.Poly.Core
-  ( Core
+  ( Core(..)
   , pattern IdF
   , pattern InlF
   , pattern InrF
@@ -55,9 +55,15 @@ data Core (a :: *)
   where
     Unit  :: Core ()
 
-    Val   :: Value a
-          => a
-          -> Core a
+    Lit :: Value a => a -> Core a
+
+    -- use internally
+    Var :: Integer -> Core a
+    Val :: Value a => a -> Core a
+
+    -- Apply
+    (:$) :: Core (a -> b) -> Core a -> Core b
+    -- (:$) :: a :-> b -> Core a -> Core b
 
     Prim  :: String -- XXX: name of the "primitive function"
           -> a -- Semantics in Haskell of the primitive function
@@ -168,6 +174,7 @@ ap (f, x) = f x
 
 interp :: Core t -> t
 interp Unit = ()
+interp (Lit x) = x
 interp (Val x) = x
 interp (Prim _ f) = f
 interp Ap = ap . \(f, x) -> (interp . repr $ f, x)
@@ -242,6 +249,8 @@ instance Pretty (a :-> b) where
 instance Pretty (Core a) where
   pretty Unit = [ppr| "()" |]
   pretty (Val x) = [ppr| show x |]
+  pretty (Lit x) = [ppr| show x |]
+  pretty (Var x) = [ppr| "variable" + "(" + show x + ")"|]
   pretty (Prim s _) = [ppr| s |]
   pretty Ap = [ppr| "ap" |]
   pretty (Curry f) =  [ppr| "curry" + "(" > f > ")" |]

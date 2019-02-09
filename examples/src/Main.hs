@@ -1,6 +1,7 @@
 module Main where
 
 import           SPar
+import Language.Poly
 
 main :: IO ()
 main = print $ trace master
@@ -26,3 +27,16 @@ master = do
             receive 2
             end)
     end
+
+len :: Core [a] -> Core Int
+len list = Prim "length" length :$ list
+
+true :: Core (Either () ())
+true = Inl :$ Unit
+
+false :: Core (Either () ())
+false = Inr :$ Unit
+
+smaller :: Ord a => Core a -> Core a -> Core (Either () ())
+smaller a b = Prim "<" small :$ a :$ a
+    where small a b = if a > b then Left () else Right ()
