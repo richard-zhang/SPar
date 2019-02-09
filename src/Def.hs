@@ -7,7 +7,7 @@ module Def where
 
 import           Control.Monad.Free
 import           Control.Monad.State
-import Expr
+import           Expr
 
 type RoleID = Integer
 
