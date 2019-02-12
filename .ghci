@@ -1,0 +1,13 @@
+:set -Wall -fwarn-tabs -fno-warn-type-defaults
+:set prompt "λ> "
+:set prompt-cont "λ| "
+:set -XDataKinds 
+:set -XFlexibleInstances 
+:set -XTypeOperators 
+:set -XKindSignatures 
+:set -XMultiParamTypeClasses 
+:set -XFunctionalDependencies 
+:set -XTypeFamilies 
+:set -XRankNTypes 
+:set -XGADts
+import Control.Monad.Free
