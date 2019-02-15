@@ -1,8 +1,19 @@
-{-# LANGUAGE DeriveFunctor  #-}
-{-# LANGUAGE GADTs          #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE RankNTypes     #-}
-{-# LANGUAGE TypeOperators  #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE TypeInType #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
 module Def where
 
 import           Control.Monad.Free
