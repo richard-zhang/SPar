@@ -25,18 +25,18 @@ data Expr a where
     End :: Expr ()
 
 data Pf i next where
-    Send :: Sing (n :: Nat) -> Expr a -> next -> Pf ('Free ('TS n a ('Pure ()))) next
-    Recv :: Sing (n :: Nat) -> (Expr a -> next) -> Pf ('Free ('TR n a ('Pure ()))) next
+    Send :: Sing (n :: Nat) -> Expr a -> next -> Pf ('Free ('S n a ('Pure ()))) next
+    Recv :: Sing (n :: Nat) -> (Expr a -> next) -> Pf ('Free ('R n a ('Pure ()))) next
 
 data TPf next where
-    TS :: Nat -> a -> next -> TPf next
-    TR :: Nat -> a -> next -> TPf next
+    S :: Nat -> a -> next -> TPf next
+    R :: Nat -> a -> next -> TPf next
 
 type TypeP a = Free TPf a
 
 type family (>*>) (a :: TypeP c) (b :: TypeP c) :: TypeP c where
-    'Free ('TS v r n) >*> b = 'Free ('TS v r (n >*> b))
-    'Free ('TR v r n) >*> b = 'Free ('TR v r (n >*> b))
+    'Free ('S v r n) >*> b = 'Free ('S v r (n >*> b))
+    'Free ('R v r n) >*> b = 'Free ('R v r (n >*> b))
     'Pure _ >*> b = b
 
 class IxFunctor (f :: k -> * -> *) where
@@ -63,8 +63,8 @@ instance (IxFunctor f) => IxFunctor (FreeIx f) where
 
 data STypeP (i :: TypeP k) where
     SPure :: STypeP ('Pure ())
-    STs :: STypeP a -> STypeP ('Free ('TS c b a))
-    STr :: STypeP a -> STypeP ('Free ('TR c b a))
+    STs :: STypeP a -> STypeP ('Free ('S c b a))
+    STr :: STypeP a -> STypeP ('Free ('R c b a))
 
 class WitnessTypeP (i :: TypeP k) where
     witness :: STypeP i
@@ -72,12 +72,11 @@ class WitnessTypeP (i :: TypeP k) where
 instance WitnessTypeP ('Pure ()) where
     witness = SPure
 
-instance WitnessTypeP a => WitnessTypeP ('Free ('TS c b a)) where
+instance WitnessTypeP a => WitnessTypeP ('Free ('S c b a)) where
     witness = STs witness
 
-instance WitnessTypeP a => WitnessTypeP ('Free ('TR c b a)) where
+instance WitnessTypeP a => WitnessTypeP ('Free ('R c b a)) where
     witness = STr witness
-
 
 appRightId :: STypeP i -> i :~: (i >*> 'Pure ())
 appRightId SPure   = Refl
@@ -100,10 +99,10 @@ liftF' = case appRightId (witness :: STypeP i) of
 
 type P i a = FreeIx Pf i (Expr a)
 
-send :: Sing n -> Expr a -> FreeIx Pf ( 'Free ( 'TS n a ( 'Pure ()))) (Expr a)
+send :: Sing n -> Expr a -> FreeIx Pf ( 'Free ( 'S n a ( 'Pure ()))) (Expr a)
 send role value = liftF' (Send role value value)
 
-recv :: Sing n -> FreeIx Pf ( 'Free ( 'TR n a ( 'Pure ()))) (Expr a)
+recv :: Sing n -> FreeIx Pf ( 'Free ( 'R n a ( 'Pure ()))) (Expr a)
 recv role = liftF' (Recv role id)
 
 class IxFunctor m => IxMonad (m :: k -> * -> *) where
@@ -142,11 +141,8 @@ instance (IxFunctor f) => IxMonad (FreeIx f) where
     (>>=) = bind
 
 data Process (k :: (TypeP c, Nat)) where
-    Process :: Sing (a :: Nat) -> P c b -> Process '(c, a)
+    Process :: Sing (a :: Nat) -> P info val -> Process '(info, a)
 
--- test :: P ('Free ('TS 1 Integer ('Free ('TR 2 Integer ('Pure ()))))) ()
--- test :: P ('Free ('TS 1 Integer ('Free ('TR 2 Integer ('Pure ()))))) ()
-test :: FreeIx Pf (Plus ('Free ('TS 1 Integer ('Pure ()))) ('Free ('TR 2 Integer ('Pure ())))) (Expr ())
 test = do
     send (SNat :: Sing 1) (Var 10)
     _x :: Expr Integer <- recv (SNat :: Sing 2)
@@ -154,20 +150,20 @@ test = do
 
 type family Project (a :: TypeP c) (r :: Nat) :: TypeP c where
     Project ('Pure b) _ = ('Pure b)
-    Project ('Free ('TS r0 v next)) r0 = 'Free ('TS r0 v (Project next r0))
-    Project ('Free ('TR r0 v next)) r0 = 'Free ('TR r0 v (Project next r0))
-    Project ('Free ('TS r0 v next)) r1 = Project next r1
-    Project ('Free ('TR r0 v next)) r1 = Project next r1
+    Project ('Free ('S r0 v next)) r0 = 'Free ('S r0 v (Project next r0))
+    Project ('Free ('R r0 v next)) r0 = 'Free ('R r0 v (Project next r0))
+    Project ('Free ('S r0 v next)) r1 = Project next r1
+    Project ('Free ('R r0 v next)) r1 = Project next r1
 
 type family Dual (a :: TypeP c) (r :: Nat) :: TypeP c where
     Dual ('Pure b) _ = ('Pure b)
-    Dual ('Free ('TS r0 v next)) r1 = 'Free ('TR r1 v (Dual next r1))
-    Dual ('Free ('TR r0 v next)) r1 = 'Free ('TS r1 v (Dual next r1))
+    Dual ('Free ('S r0 v next)) r1 = 'Free ('R r1 v (Dual next r1))
+    Dual ('Free ('R r0 v next)) r1 = 'Free ('S r1 v (Dual next r1))
 
 type family IsDualHelper (k1 :: (TypeP c, Nat)) (k2 :: (TypeP c, Nat)) :: Constraint where
     IsDualHelper '(a, aid) '(b, bid) = (Dual (Project a bid) aid ~ Project b aid, Dual (Project b aid) bid ~ Project a bid)
 
-type family IsDual (k1 :: ((TypeP c, Nat), (TypeP c, Nat))) where
+type family IsDual (k1 :: ((TypeP c, Nat), (TypeP c, Nat))) :: Constraint where
     IsDual '(k1, k2) = IsDualHelper k1 k2
 
 type And (a :: Constraint) (b :: Constraint)  = (a, b)
@@ -196,9 +192,21 @@ data HList (l::[*]) where
     HCons :: e -> HList l -> HList (e ': l)
 
 eval3
-    :: DualityC '[info1, info2, info3]
-    => Process info1
+    :: DualityC '[info0, info1, info2]
+    => Process info0
+    -> Process info1
     -> Process info2
-    -> Process info3
     -> [String]
-eval3 = undefined
+eval3 (Process aid aproc) (Process bid bproc) (Process cid cproc) = undefined
+
+t0 = Proxy :: Proxy '( 'Free ('S 1 Int ('Free ('S 2 String ('Pure ())))), 0)
+t1 = Proxy :: Proxy '( 'Free ('R 0 Int ('Pure ())), 1)
+t2 = Proxy :: Proxy '( 'Free ('R 0 String ('Pure ())), 2)
+
+check3 :: DualityC '[info0, info1, info2] => Proxy info0 -> Proxy info1 -> Proxy info2 -> String
+check3 _ _ _ = "u"
+
+check2 :: DualityC '[info0, info1] => Proxy info0 -> Proxy info1 -> String
+check2 _ _ = "f"
+
+a = check2 t0 t1

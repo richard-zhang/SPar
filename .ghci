@@ -11,6 +11,7 @@
 :set -XRankNTypes 
 :set -XGADts
 :set -XPolyKinds
+:set -XConstraintKinds
 import Control.Monad.Free
 import Data.Proxy
 import Data.Singletons
