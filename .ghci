@@ -9,7 +9,7 @@
 :set -XFunctionalDependencies 
 :set -XTypeFamilies 
 :set -XRankNTypes 
-:set -XGADts
+:set -XGADTs
 :set -XPolyKinds
 :set -XConstraintKinds
 import Control.Monad.Free

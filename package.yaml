@@ -29,6 +29,7 @@ dependencies:
 - constrained-control >= 0.1 && < 0.2
 - constraints >= 0.10 && < 0.11
 - ivector >= 0.1 && < 0.2
+- containers == 0.6.0.1
 
 library:
   source-dirs: src

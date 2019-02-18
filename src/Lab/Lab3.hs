@@ -11,7 +11,7 @@
 {-# LANGUAGE TypeInType #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ConstraintKinds #-}
-module Lab3 where
+module Lab.Lab3 where
 
 import           Data.Type.Equality
 import           Data.Proxy
@@ -19,14 +19,20 @@ import           Prelude                 hiding ( Monad(..) )
 import           Data.Singletons.TypeLits
 import           Control.Monad.Free
 import           Data.Kind
+import qualified Data.Map.Strict               as Map
+-- import Control.Monad.Reader
+-- import Control.Monad.State
+import           GHC.Natural
+
+type CC a = (Show a, Read a)
 
 data Expr a where
     Var :: a -> Expr a
     End :: Expr ()
 
 data Pf i next where
-    Send :: Sing (n :: Nat) -> Expr a -> next -> Pf ('Free ('S n a ('Pure ()))) next
-    Recv :: Sing (n :: Nat) -> (Expr a -> next) -> Pf ('Free ('R n a ('Pure ()))) next
+    Send :: (CC a) => Sing (n :: Nat) -> Expr a -> next -> Pf ('Free ('S n a ('Pure ()))) next
+    Recv :: (CC a) => Sing (n :: Nat) -> (Expr a -> next) -> Pf ('Free ('R n a ('Pure ()))) next
 
 data TPf next where
     S :: Nat -> a -> next -> TPf next
@@ -38,6 +44,11 @@ type family (>*>) (a :: TypeP c) (b :: TypeP c) :: TypeP c where
     'Free ('S v r n) >*> b = 'Free ('S v r (n >*> b))
     'Free ('R v r n) >*> b = 'Free ('R v r (n >*> b))
     'Pure _ >*> b = b
+
+type P i a = FreeIx Pf i (Expr a)
+
+data Process (k :: (TypeP *, Nat)) a where
+    Process :: Sing (a :: Nat) -> P info val -> Process '(info, a) val
 
 class IxFunctor (f :: k -> * -> *) where
     imap :: (a -> b) -> f i a -> f i b
@@ -97,12 +108,10 @@ liftF' :: forall f i a . (WitnessTypeP i, IxFunctor f) => f i a -> FreeIx f i a
 liftF' = case appRightId (witness :: STypeP i) of
     Refl -> Wrap . imap Return
 
-type P i a = FreeIx Pf i (Expr a)
-
-send :: Sing n -> Expr a -> FreeIx Pf ( 'Free ( 'S n a ( 'Pure ()))) (Expr a)
+send :: (CC a) => Sing n -> Expr a -> FreeIx Pf ( 'Free ( 'S n a ( 'Pure ()))) (Expr a)
 send role value = liftF' (Send role value value)
 
-recv :: Sing n -> FreeIx Pf ( 'Free ( 'R n a ( 'Pure ()))) (Expr a)
+recv :: (CC a) => Sing n -> FreeIx Pf ( 'Free ( 'R n a ( 'Pure ()))) (Expr a)
 recv role = liftF' (Recv role id)
 
 class IxFunctor m => IxMonad (m :: k -> * -> *) where
@@ -139,14 +148,6 @@ instance (IxFunctor f) => IxMonad (FreeIx f) where
 
     return = Return
     (>>=) = bind
-
-data Process (k :: (TypeP c, Nat)) where
-    Process :: Sing (a :: Nat) -> P info val -> Process '(info, a)
-
-test = do
-    send (SNat :: Sing 1) (Var 10)
-    _x :: Expr Integer <- recv (SNat :: Sing 2)
-    return End
 
 type family Project (a :: TypeP c) (r :: Nat) :: TypeP c where
     Project ('Pure b) _ = ('Pure b)
@@ -193,9 +194,9 @@ data HList (l::[*]) where
 
 eval3
     :: DualityC '[info0, info1, info2]
-    => Process info0
-    -> Process info1
-    -> Process info2
+    => Process info0 a
+    -> Process info1 b
+    -> Process info2 c
     -> [String]
 eval3 (Process aid aproc) (Process bid bproc) (Process cid cproc) = undefined
 
@@ -203,10 +204,29 @@ t0 = Proxy :: Proxy '( 'Free ('S 1 Int ('Free ('S 2 String ('Pure ())))), 0)
 t1 = Proxy :: Proxy '( 'Free ('R 0 Int ('Pure ())), 1)
 t2 = Proxy :: Proxy '( 'Free ('R 0 String ('Pure ())), 2)
 
-check3 :: DualityC '[info0, info1, info2] => Proxy info0 -> Proxy info1 -> Proxy info2 -> String
+check3
+    :: DualityC '[info0, info1, info2]
+    => Proxy info0
+    -> Proxy info1
+    -> Proxy info2
+    -> String
 check3 _ _ _ = "u"
 
-check2 :: DualityC '[info0, info1] => Proxy info0 -> Proxy info1 -> String
+check2 :: DualityC '[info0, info1] => Process info0 a -> Process info1 b-> String
 check2 _ _ = "f"
 
-a = check2 t0 t1
+-- eval2 :: DualityC '[info0, info1] => Process info0 -> Process info1 ->  
+-- a = check2 t0 t1
+
+test = do
+    send (SNat :: Sing 1) (Var 10)
+    -- _x :: Expr Integer <- recv (SNat :: Sing 1)
+    return End
+
+test1 = do
+    x :: Expr Integer <- recv (SNat :: Sing 0) 
+    -- send (SNat :: Sing 0) x
+    return End
+
+p1 = Process (SNat :: Sing 0) test
+p2 = Process (SNat :: Sing 1) test1

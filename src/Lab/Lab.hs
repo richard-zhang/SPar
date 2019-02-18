@@ -15,7 +15,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeInType #-}
-module Lab () where
+module Lab.Lab () where
 
 import           Control.Monad.Free
 import           Data.Singletons
