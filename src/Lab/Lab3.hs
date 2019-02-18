@@ -188,17 +188,29 @@ type family DualityCHelper (c :: [((TypeP b, Nat), (TypeP b, Nat))]) :: Constrai
 type family DualityC (c :: [(TypeP b, Nat)]) :: Constraint where
     DualityC xs = DualityCHelper (Handshake xs)
 
-data HList (l::[*]) where
-    HNil  :: HList '[]
-    HCons :: e -> HList l -> HList (e ': l)
+type family DualityCons procs :: Constraint where
+    DualityCons xs = DualityC (ExtractInfo xs)
 
-eval3
-    :: DualityC '[info0, info1, info2]
-    => Process info0 a
-    -> Process info1 b
-    -> Process info2 c
-    -> [String]
-eval3 (Process aid aproc) (Process bid bproc) (Process cid cproc) = undefined
+type family ExtractInfo procs :: [(TypeP *, Nat)] where
+    ExtractInfo '[] = '[]
+    ExtractInfo (x ': xs) = ExtractProcessInfo x : ExtractInfo xs
+
+type family ExtractProcessInfo (c :: *) :: (TypeP *, Nat) where
+    ExtractProcessInfo (Process k _) = k
+
+-- TODO replace () with general type variable a
+-- TODO replace PList with general HList ??
+data PList (l::[*]) where
+    PNil  :: PList '[]
+    PCons :: Process k () -> PList l -> PList (Process k () ': l)
+
+-- eval3
+--     :: DualityC '[info0, info1, info2]
+--     => Process info0 a
+--     -> Process info1 b
+--     -> Process info2 c
+--     -> [String]
+-- eval3 (Process aid aproc) (Process bid bproc) (Process cid cproc) = undefined
 
 t0 = Proxy :: Proxy '( 'Free ('S 1 Int ('Free ('S 2 String ('Pure ())))), 0)
 t1 = Proxy :: Proxy '( 'Free ('R 0 Int ('Pure ())), 1)
@@ -228,5 +240,7 @@ test1 = do
     -- send (SNat :: Sing 0) x
     return End
 
+
 p1 = Process (SNat :: Sing 0) test
 p2 = Process (SNat :: Sing 1) test1
+ps = PCons p1 (PCons p2 PNil)

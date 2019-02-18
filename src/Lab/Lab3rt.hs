@@ -26,7 +26,7 @@ import           Control.Monad.Writer
 import           Control.Monad.State
 import           Lab.Lab3                hiding ( IxMonad(..) )
 import           GHC.Natural
-import Data.Typeable
+import           Data.Typeable
 
 type GlobalMq = Map.Map Natural [String]
 type Gs = StateT GlobalMq (WriterT [ObservableAction] IO) ()
@@ -71,25 +71,34 @@ normalEval' :: Process' () -> [Process' ()] -> Gs
 normalEval' (role, Pure _                       ) xs = normalEval xs
 normalEval' (role, Free (Send' receiver value n)) xs = do
     env <- get
+    -- debug (return env)
     put (Map.update (Just . (++ [serialize value])) receiver env)
+    -- debug get
     tell [ASend receiver role (serialize value)]
     normalEval (xs ++ [(role, n)])
 normalEval' act@(role, Free (Recv' sender cont)) xs = do
     env <- get
     let value = Map.lookup role env
     case value of
-        Just (x:rest) -> do
+        Just (x : rest) -> do
             put (Map.update (const (Just rest)) role env)
             tell [ARecv sender role x]
             normalEval (xs ++ [(role, cont $ deserialize x)])
-        -- Just [] -> normalEval $ xs ++ [act]
+        Just [] -> normalEval $ xs ++ [act]
         Nothing -> error "u"
 
-eval2 :: DualityC '[info0, info1] => Process info0 () -> Process info1 () -> IO [ObservableAction]
-eval2 a b = snd <$> runWriterT (runStateT (normalEval processes) env)
-    where
-        processes = [eraseSessionInfo a, eraseSessionInfo b]
-        env = initialEnv processes
+eval' :: [Process' ()] -> IO [ObservableAction]
+eval' xs = snd <$> runWriterT (runStateT (normalEval xs) (initialEnv xs))
+
+evalN :: DualityCons xs => PList xs -> IO [ObservableAction]
+evalN = eval' . convert2Normal
+  where
+    convert2Normal :: PList xs -> [Process' ()]
+    convert2Normal PNil         = []
+    convert2Normal (PCons p ps) = eraseSessionInfo p : convert2Normal ps
 
 initialEnv :: [Process' ()] -> GlobalMq
 initialEnv = Map.fromList . fmap (\(r, _) -> (r, []))
+
+debug :: (MonadIO m, Show a) => m a -> m ()
+debug x = x >>= liftIO . print
