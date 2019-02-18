@@ -101,4 +101,4 @@ initialEnv :: [Process' ()] -> GlobalMq
 initialEnv = Map.fromList . fmap (\(r, _) -> (r, []))
 
 debug :: (MonadIO m, Show a) => m a -> m ()
-debug x = x >>= liftIO . print
+debug = (>>= liftIO . print)
