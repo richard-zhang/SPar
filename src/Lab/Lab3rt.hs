@@ -27,15 +27,16 @@ import           Control.Monad.State
 import           Lab.Lab3                hiding ( IxMonad(..) )
 import           GHC.Natural
 import           Data.Typeable
+import           Language.Poly.Core             ( Core )
 
 type GlobalMq = Map.Map Natural [String]
 type Gs = StateT GlobalMq (WriterT [ObservableAction] IO) ()
 
-serialize :: (CC a) => Expr a -> String
-serialize (Var x) = show x
+serialize :: (CC a) => Core a -> String
+serialize = undefined
 
-deserialize :: (CC a) => String -> Expr a
-deserialize a = Var $ read a
+deserialize :: (CC a) => String -> Core a
+deserialize = undefined
 
 data ObservableAction =
     ASend Natural Natural String
@@ -43,15 +44,15 @@ data ObservableAction =
   deriving (Show)
 
 data Pf' next where
-    Send' :: (CC a) => Natural -> Expr a -> next -> Pf' next
-    Recv' :: (CC a) => Natural -> (Expr a -> next) -> Pf' next
+    Send' :: (CC a) => Natural -> Core a -> next -> Pf' next
+    Recv' :: (CC a) => Natural -> (Core a -> next) -> Pf' next
 
 instance Functor Pf' where
     fmap f (Send' r v n) = Send' r v $ f n
     fmap f (Recv' r cont) = Recv' r (f . cont)
 
 type Process' a = (Natural, P' a)
-type P' a = Free Pf' (Expr a)
+type P' a = Free Pf' (Core a)
 
 eraseSessionInfo' :: P i a -> P' a
 eraseSessionInfo' (Return v) = Pure v
