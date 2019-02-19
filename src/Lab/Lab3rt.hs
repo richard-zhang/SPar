@@ -27,29 +27,35 @@ import           Control.Monad.State
 import           Lab.Lab3                hiding ( IxMonad(..) )
 import           GHC.Natural
 import           Data.Typeable
-import           Language.Poly.Core             ( Core )
+import           Language.Poly.Core             ( Core(Lit) )
 
 type GlobalMq = Map.Map Natural [String]
 type Gs = StateT GlobalMq (WriterT [ObservableAction] IO) ()
 
 serialize :: (CC a) => Core a -> String
-serialize = undefined
+serialize (Lit a) = show a
 
 deserialize :: (CC a) => String -> Core a
-deserialize = undefined
+deserialize = Lit . read 
 
 data ObservableAction =
     ASend Natural Natural String
   | ARecv Natural Natural String
+  | ASelect
+  | ABranch
   deriving (Show)
 
 data Pf' next where
     Send' :: (CC a) => Natural -> Core a -> next -> Pf' next
     Recv' :: (CC a) => Natural -> (Core a -> next) -> Pf' next
+    Select' :: (CC a, CC b, CC c) => Natural -> Core (Either a b) -> (Core a -> P' c) -> (Core b -> P' c) -> next -> Pf' next
+    Branch' :: (CC c) => Natural -> P' c -> P' c -> next -> Pf' next
 
 instance Functor Pf' where
     fmap f (Send' r v n) = Send' r v $ f n
     fmap f (Recv' r cont) = Recv' r (f . cont)
+    fmap f (Select' r v cont1 cont2 n) = Select' r v cont1 cont2 (f n)
+    fmap f (Branch' r p1 p2 n) = Branch' r p1 p2 (f n)
 
 type Process' a = (Natural, P' a)
 type P' a = Free Pf' (Core a)
@@ -60,6 +66,20 @@ eraseSessionInfo' (Wrap (Send (r :: Sing (n :: Nat)) v next)) =
     Free (Send' (fromSing r) v (eraseSessionInfo' next))
 eraseSessionInfo' (Wrap (Recv (r :: Sing (n :: Nat)) cont)) =
     Free (Recv' (fromSing r) (eraseSessionInfo' . cont))
+eraseSessionInfo' (Wrap (Select (r :: Sing (n :: Nat)) v cont1 cont2 next)) =
+    Free
+        (Select' (fromSing r)
+                 v
+                 (eraseSessionInfo' . cont1)
+                 (eraseSessionInfo' . cont2)
+                 (eraseSessionInfo' next)
+        )
+eraseSessionInfo' (Wrap (Branch (r :: Sing (n :: Nat)) left right next)) = Free
+    (Branch' (fromSing r)
+             (eraseSessionInfo' left)
+             (eraseSessionInfo' right)
+             (eraseSessionInfo' next)
+    )
 
 eraseSessionInfo :: Process k a -> Process' a
 eraseSessionInfo (Process n value) = (fromSing n, eraseSessionInfo' value)
@@ -72,9 +92,9 @@ normalEval' :: Process' () -> [Process' ()] -> Gs
 normalEval' (role, Pure _                       ) xs = normalEval xs
 normalEval' (role, Free (Send' receiver value n)) xs = do
     env <- get
-    -- debug (return env)
+    debug (return env)
     put (Map.update (Just . (++ [serialize value])) receiver env)
-    -- debug get
+    debug get
     tell [ASend receiver role (serialize value)]
     normalEval (xs ++ [(role, n)])
 normalEval' act@(role, Free (Recv' sender cont)) xs = do
