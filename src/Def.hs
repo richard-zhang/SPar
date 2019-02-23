@@ -1,87 +1,100 @@
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE TypeInType #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE RebindableSyntax #-}
+{-# LANGUAGE TypeInType #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE ConstraintKinds #-}
 module Def where
 
+import           Data.Type.Equality
+import           Data.Proxy
+import           Prelude hiding ((>>), (>>=), return)
+import           Data.Singletons.TypeLits
+import           Data.Kind
+import qualified Data.Map.Strict               as Map
+import           GHC.Natural
+import           Language.Poly.Core             ( Core(..) )
+import qualified GHC.TypeLits
+import           Type
 import           Control.Monad.Free
-import           Control.Monad.State
-import           Language.Poly
+import           Control.Monad.Indexed
+import qualified Control.Monad.Indexed.Free    as F
 
-type RoleID = Integer
+type CC a = (Show a, Read a)
 
-data ProcF next where
-    Send :: RoleID -> Core a -> next -> ProcF next
-    Receive :: RoleID -> (Core a -> next) -> ProcF next
-    Branch :: RoleID -> next -> next -> ProcF next
-    Select :: [RoleID] -> Core (Either a b) -> (Core a -> next) -> (Core b -> next) -> ProcF next
+data ProcF (i :: SType Type) (j :: SType Type) next where
+    Send :: (CC a) => Sing (n :: Nat) -> Core a -> next -> ProcF ('Free ('S n a j)) j next
+    Recv :: (CC a) => Sing (n :: Nat) -> (Core a -> next) -> ProcF ('Free ('R n a j)) j next
+    Branch :: (CC c) => Sing (n :: Nat) -> Proc' left j c -> Proc' right j c -> next -> ProcF ('Free ('B n left right j)) j next
+    Select :: (CC a, CC b, CC c) => Sing (n :: Nat) -> Core (Either a b) -> (Core a -> Proc' left j c) -> (Core b -> Proc' right j c) -> next -> ProcF ('Free ('Se n left right j)) j next
 
-instance Functor ProcF where
-    fmap f (Send r e n)             = Send r e $ f n
-    fmap f (Receive r cont)         = Receive r (f . cont)
-    fmap f (Branch r a b)           = Branch r (f a) (f b)
-    fmap f (Select r e cont1 cont2) = Select r e (f . cont1) (f . cont2)
+type Proc' i j a = F.IxFree ProcF i j (Core a)
 
-type Proc a = Free ProcF (Core a)
+instance Functor (ProcF i j) where
+    fmap f (Send a v n) = Send a v $ f n
+    fmap f (Recv a cont) = Recv a (f . cont)
+    fmap f (Branch r left right n) = Branch r left right $ f n
+    fmap f (Select r v cont1 cont2 next) = Select r v cont1 cont2 (f next)
 
-send :: RoleID -> Core a -> Proc a
-send role value = Free $ Send role value (Pure value)
+instance IxFunctor ProcF where
+    imap = fmap
 
-receive :: RoleID -> Proc a
-receive role = Free $ Receive role Pure
+liftF' :: IxFunctor f => f i j a -> F.IxFree f i j a
+liftF' = F.Free . imap F.Pure
+
+send
+    :: (CC a)
+    => Sing n
+    -> Core a
+    -> Proc' ( 'Free ( 'S n a j)) j a
+send role value = liftF' $ Send role value value
+
+recv :: (CC a) => Sing n -> Proc' ('Free ( 'R n a j)) j a
+recv role = liftF' (Recv role id)
 
 select
-    :: [RoleID]
+    :: (CC a, CC b, CC c)
+    => Sing n
     -> Core (Either a b)
-    -> (Core a -> Proc c)
-    -> (Core b -> Proc c)
-    -> Proc c
-select roles expr fac fbc = Free $ Select roles expr fac fbc
+    -> (Core a -> Proc' left j c)
+    -> (Core b -> Proc' right j c)
+    -> Proc' ( 'Free ('Se n left right j)) j ()
+select role var cont1 cont2 = liftF' $ Select role var cont1 cont2 Unit
 
-branch :: RoleID -> Proc c -> Proc c -> Proc c
-branch role lproc rproc = Free $ Branch role lproc rproc
+branch :: (Show c, Read c) => Sing n -> Proc' left j c -> Proc' right j c -> Proc' ('Free ('B n left right j)) j ()
+branch role one two = liftF' $ Branch role one two Unit
 
-end :: Proc ()
-end = return Unit
+(>>=) :: IxMonad m => m i j a -> (a -> m j k b) -> m i k b
+(>>=) = (>>>=)
 
-data Trace =
-    Seq String Trace
-  | Node String Trace Trace
-  | End
-  deriving (Show, Eq)
+(>>) :: IxMonad m => m i j b -> m j k1 b1 -> m i k1 b1
+a >> b = a >>= const b
 
-traceHelper :: Proc a -> State Integer Trace
-traceHelper (Pure _           ) = return End
-traceHelper (Free (Send r e n)) = do
-    traces <- traceHelper n
-    return $ Seq ("Send to " ++ show r) traces
-traceHelper (Free (Receive r cont)) = do
-    v <- get
-    put (v + 1)
-    traces <- traceHelper $ cont $ Var v
-    return $ Seq ("Receive from " ++ show r) traces
-traceHelper (Free (Select roles v fac fbc)) = do
-    v <- get
-    put (v + 1)
-    left  <- traceHelper $ fac $ Var v
-    right <- traceHelper $ fbc $ Var v
-    return $ Node ("Select to " ++ show roles) left right
-traceHelper (Free (Branch r lproc rproc)) = do
-    left  <- traceHelper lproc
-    right <- traceHelper rproc
-    return $ Node ("Branch from " ++ show r) left right
+return :: IxMonad m => a -> m i i a
+return = ireturn
 
-trace :: Proc a -> Trace
-trace proc = evalState (traceHelper proc) 0
+test = do
+    send (SNat :: Sing 1) (Lit 10)
+    x :: Core (Either () ()) <- recv (SNat :: Sing 1)
+    select (SNat :: Sing 2) x (\_ -> recv (SNat :: Sing 2)) (\_ -> send (SNat :: Sing 2) (Lit 30))
+    return Unit
+
+test1 = do
+    x :: Core Integer <- recv (SNat :: Sing 0)
+    send (SNat :: Sing 0) (Lit (Left () :: Either () ()))
+    return Unit
+
+test2 :: Proc' ('Free ('B 0 ('Free ('S 0 Integer j)) ('Free ('R 0 Integer j)) j)) j ()
+test2 = branch (SNat :: Sing 0) (send (SNat :: Sing 0) (Lit 20)) (recv (SNat :: Sing 0))
+
+test3 = do
+    send (SNat :: Sing 1) (Lit 10)
+    send (SNat :: Sing 1) (Lit "Str")
+    send (SNat :: Sing 1) (Lit 'c')

@@ -10,7 +10,7 @@
 {-# LANGUAGE RebindableSyntax #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE StandaloneDeriving #-}
-module Lab.Lab2 () where
+module Lab.Lab2 where
 
 import           Data.Type.Equality
 import           Data.Proxy
