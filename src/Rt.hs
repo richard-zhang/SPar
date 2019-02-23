@@ -28,7 +28,8 @@ import           GHC.Natural
 import           Data.Typeable
 import           Language.Poly.Core             ( Core(Lit) )
 import           Def
-import Type
+import           Type
+import qualified Control.Monad.Indexed.Free    as F
 
 type ProcessRT a = (ProcRT a, Natural)
 
@@ -55,3 +56,27 @@ data ObservableAction =
   | ASelect
   | ABranch
   deriving (Show)
+
+eraseSessionInfo' :: Proc' i j a -> ProcRT a
+eraseSessionInfo' (F.Pure v) = Pure v 
+eraseSessionInfo' (F.Free (Send (r :: Sing (n :: Nat)) v next)) =
+    Free (Send' (fromSing r) v (eraseSessionInfo' next))
+eraseSessionInfo' (F.Free (Recv (r :: Sing (n :: Nat)) cont)) =
+    Free (Recv' (fromSing r) (eraseSessionInfo' . cont))
+eraseSessionInfo' (F.Free (Select (r :: Sing (n :: Nat)) v cont1 cont2 next)) =
+    Free
+        (Select' (fromSing r)
+                 v
+                 (eraseSessionInfo' . cont1)
+                 (eraseSessionInfo' . cont2)
+                 (eraseSessionInfo' next)
+        )
+eraseSessionInfo' (F.Free (Branch (r :: Sing (n :: Nat)) left right next)) = Free
+    (Branch' (fromSing r)
+             (eraseSessionInfo' left)
+             (eraseSessionInfo' right)
+             (eraseSessionInfo' next)
+    )
+
+eraseSessionInfo :: Process k a -> ProcessRT a
+eraseSessionInfo (Process n value) = (eraseSessionInfo' value, fromSing n)

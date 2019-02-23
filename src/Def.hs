@@ -39,7 +39,7 @@ data ProcF (i :: SType Type) (j :: SType Type) next where
     Select :: (CC a, CC b, CC c) => Sing (n :: Nat) -> Core (Either a b) -> (Core a -> Proc' left ('Pure ()) c) -> (Core b -> Proc' right ('Pure ()) c) -> next -> ProcF ('Free ('Se n left right j)) j next
 
 type Proc' i j a = F.IxFree ProcF i j (Core a)
-type Proc i a = forall j. F.IxFree ProcF (i >*> j) j (Core a)
+type Proc (i :: SType *) a = forall j. F.IxFree ProcF (i >*> j) j (Core a)
 
 instance Functor (ProcF i j) where
     fmap f (Send a v n) = Send a v $ f n
@@ -85,15 +85,29 @@ a >> b = a >>= const b
 return :: IxMonad m => a -> m i i a
 return = ireturn
 
-test :: Proc ('Free ('S 1 Integer ('Free ('R 1 (Either () ()) ('Free ('Se 2 ('Free ('R 2 Integer ('Pure ()))) ('Free ('S 2 Integer ('Pure ()))) ('Free ('S 1 Integer ('Pure ()))))))))) ()
+data Process (k :: (SType *, Nat)) a where
+    Process :: Sing (a :: Nat) -> Proc' info ('Pure ()) val -> Process '(info, a) val
+    -- Process :: Sing (a :: Nat) -> Proc info val -> Process '(info, a) val
+
+data PList (l::[*]) where
+    PNil  :: PList '[]
+    PCons :: Process k () -> PList l -> PList (Process k () ': l)
+
+type family DualityCons procs :: Constraint where
+    DualityCons xs = DualityC (ExtractInfo xs)
+
+type family ExtractInfo procs :: [(SType *, Nat)] where
+    ExtractInfo '[] = '[]
+    ExtractInfo (x ': xs) = ExtractProcessInfo x : ExtractInfo xs
+
+type family ExtractProcessInfo (c :: *) :: (SType *, Nat) where
+    ExtractProcessInfo (Process k _) = k
+
 test = do
     send (SNat :: Sing 1) (Lit 10)
+    -- _x :: Core Integer <- recv (SNat :: Sing 1)
     x :: Core (Either () ()) <- recv (SNat :: Sing 1)
-    select (SNat :: Sing 2)
-           x
-           (\_ -> recv (SNat :: Sing 2))
-           (\_ -> send (SNat :: Sing 2) (Lit 30))
-    send (SNat :: Sing 1) (Lit 10)
+    select (SNat :: Sing 2) x (\_ -> recv (SNat :: Sing 2)) (\_ -> send (SNat :: Sing 2) (Lit 30))
     return Unit
 
 test1 = do
@@ -101,16 +115,16 @@ test1 = do
     send (SNat :: Sing 0) (Lit (Left () :: Either () ()))
     return Unit
 
-test2 :: Proc ('Free ('B 0 ('Free ('S 2 Integer ('Pure ()))) ('Free ('R 2 Integer ('Pure ()))) ('Pure ()))) ()
-test2 = branch (SNat :: Sing 0) a b
+-- test2 = branch (SNat :: Sing 0) (send (SNat :: Sing 0) (Lit 20)) (send (SNat :: Sing 0) (Lit 40) >> recv (SNat :: Sing 0))
+test2 = branch (SNat :: Sing 0) (send (SNat :: Sing 0) (Lit 20)) (recv (SNat :: Sing 0))
 
-test3 = do
-    send (SNat :: Sing 1) (Lit 10)
-    send (SNat :: Sing 1) (Lit "Str")
-    send (SNat :: Sing 1) (Lit 'c')
+p0 = Process (SNat :: Sing 0) test
+p1 = Process (SNat :: Sing 1) test1
+p2 = Process (SNat :: Sing 2) test2
+ps = PCons p0 (PCons p1 (PCons p2 PNil))
 
-a :: Proc ( 'Free ( 'S 2 Integer ('Pure ()))) Integer
-a = send (SNat :: Sing 2) (Lit 20)
+hello :: DualityCons xs => PList xs -> String
+hello _ = "f"
 
-b :: Proc ( 'Free ( 'R 2 Integer ('Pure ()))) Integer
-b = recv (SNat :: Sing 2) 
+gk :: String
+gk = hello ps 

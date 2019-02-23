@@ -275,6 +275,8 @@ p1 = Process (SNat :: Sing 1) test1
 p2 = Process (SNat :: Sing 2) test2
 ps = PCons p0 (PCons p1 (PCons p2 PNil))
 
+hello :: DualityCons xs => PList xs -> String
+hello _ = "f"
 -- t0 = Proxy :: Proxy '( 'Free ('S 1 Int ('Free ('S 2 String ('Pure ())))), 0)
 -- t1 = Proxy :: Proxy '( 'Free ('R 0 Int ('Pure ())), 1)
 -- t2 = Proxy :: Proxy '( 'Free ('R 0 String ('Pure ())), 2)
