@@ -56,3 +56,6 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - spar
+    - hspec >= 2.7 && < 2.8
+    - type-spec > 0.3 && <= 0.4
+    - should-not-typecheck >= 2.1 && < 2.2

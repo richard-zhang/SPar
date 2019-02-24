@@ -82,7 +82,7 @@ type family Handshake (c :: [k]) where
     Handshake (x ': xs) = AppendTop x xs ++ Handshake xs
 
 type family DualityCHelper (c :: [((SType b, Nat), (SType b, Nat))]) :: Constraint where
-    DualityCHelper '[] = ()
+    DualityCHelper '[] = 'Pure () ~ 'Pure ()
     DualityCHelper (x ': xs) = IsDual x `And` DualityCHelper xs
 
 type family DualityC (c :: [(SType b, Nat)]) :: Constraint where

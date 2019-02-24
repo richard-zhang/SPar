@@ -16,6 +16,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Language.Poly.Core
   ( Core(..)
+  , Serialise
   , pattern IdF
   , pattern InlF
   , pattern InrF
@@ -46,6 +47,8 @@ import Data.Constraint ( Dict(..) )
 infixr 4 :->
 
 type CC = Typeable
+
+type Serialise a = (Show a, Read a)
 
 class Show a => Value a where
 
