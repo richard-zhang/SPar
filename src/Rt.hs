@@ -28,6 +28,7 @@ import           Def                     hiding ( (>>=)
                                                 , (>>)
                                                 , return
                                                 )
+import TypeValue
 import qualified Control.Monad.Indexed.Free    as F
 
 type ProcessRT a = (ProcRT a, Nat)
@@ -57,6 +58,9 @@ data ObservableAction =
   | ASelect
   | ABranch
   deriving (Show)
+
+convert :: ProcRT a -> STypeV a
+convert = undefined
 
 eraseSessionInfo' :: Proc' i j a -> ProcRT a
 eraseSessionInfo' (F.Pure v) = Pure v
@@ -162,6 +166,9 @@ normalEval' act@(Free (Branch' sender left right next), role) xs = do
 
 eval' :: [ProcessRT ()] -> IO [ObservableAction]
 eval' xs = snd <$> runWriterT (runStateT (normalEval xs) (initialEnv xs))
+
+evalN2 :: [ProcessRT ()] -> IO [ObservableAction]
+evalN2 xs = if dualityC (fmap convert xs) then eval' xs else error "Not dual"
 
 evalN :: DualityCons xs => PList xs -> IO [ObservableAction]
 evalN = eval' . convert2Normal
