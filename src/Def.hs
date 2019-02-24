@@ -32,14 +32,14 @@ import           Control.Monad.Free
 import           Control.Monad.Indexed
 import qualified Control.Monad.Indexed.Free    as F
 
-data ProcF (i :: SType Type) (j :: SType Type) next where
+data ProcF (i :: SType * *) (j :: SType * *) next where
     Send :: (Serialise a) => Sing (n :: Nat) -> Core a -> next -> ProcF ('Free ('S n a j)) j next
     Recv :: (Serialise a) => Sing (n :: Nat) -> (Core a -> next) -> ProcF ('Free ('R n a j)) j next
     Branch :: (Serialise c) => Sing (n :: Nat) -> Proc' left ('Pure ()) c -> Proc' right ('Pure ()) c -> next -> ProcF ('Free ('B n left right j)) j next
     Select :: (Serialise a, Serialise b, Serialise c) => Sing (n :: Nat) -> Core (Either a b) -> (Core a -> Proc' left ('Pure ()) c) -> (Core b -> Proc' right ('Pure ()) c) -> next -> ProcF ('Free ('Se n left right j)) j next
 
 type Proc' i j a = F.IxFree ProcF i j (Core a)
-type Proc (i :: SType *) a = forall j. F.IxFree ProcF (i >*> j) j (Core a)
+type Proc (i :: SType * *) a = forall j. F.IxFree ProcF (i >*> j) j (Core a)
 
 instance Functor (ProcF i j) where
     fmap f (Send a v n) = Send a v $ f n
@@ -89,7 +89,7 @@ a >> b = a >>= const b
 return :: IxMonad m => a -> m i i a
 return = ireturn
 
-data Process (k :: (SType *, Nat)) a where
+data Process (k :: (SType * *, Nat)) a where
     Process :: Sing (a :: Nat) -> Proc' info ('Pure ()) val -> Process '(info, a) val
     -- Process :: Sing (a :: Nat) -> Proc info val -> Process '(info, a) val
 
@@ -100,11 +100,11 @@ data PList (l::[*]) where
 type family DualityCons procs :: Constraint where
     DualityCons xs = DualityC (ExtractInfo xs)
 
-type family ExtractInfo procs :: [(SType *, Nat)] where
+type family ExtractInfo procs :: [(SType * *, Nat)] where
     ExtractInfo '[] = '[]
     ExtractInfo (x ': xs) = ExtractProcessInfo x : ExtractInfo xs
 
-type family ExtractProcessInfo (c :: *) :: (SType *, Nat) where
+type family ExtractProcessInfo (c :: *) :: (SType * *, Nat) where
     ExtractProcessInfo (Process k _) = k
 
 test = do

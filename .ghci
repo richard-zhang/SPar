@@ -1,4 +1,4 @@
-:set -Wall -fwarn-tabs -fno-warn-type-defaults
+:set -Wunused-imports -fwarn-tabs -fno-warn-type-defaults
 :set prompt "λ> "
 :set prompt-cont "λ| "
 :set -XDataKinds 
@@ -11,8 +11,9 @@
 :set -XRankNTypes 
 :set -XGADTs
 :set -XPolyKinds
+:set -XQuasiQuotes
 :set -XConstraintKinds
 import Control.Monad.Free
-import Data.Proxy
 import Data.Singletons
 import Data.Singletons.TypeRepStar
+import Data.Type.Natural
