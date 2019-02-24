@@ -11,35 +11,34 @@
 {-# LANGUAGE TypeInType #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE QuasiQuotes #-}
 module Def where
 
-import           Data.Type.Equality
-import           Data.Proxy
 import           Prelude                 hiding ( (>>)
                                                 , (>>=)
                                                 , return
                                                 )
-import           Data.Singletons.TypeLits
+import           Data.Type.Natural              ( Nat
+                                                , snat
+                                                )
+import           Data.Singletons
 import           Data.Kind
-import qualified Data.Map.Strict               as Map
-import           GHC.Natural
 import           Language.Poly.Core             ( Core(..)
                                                 , Serialise
                                                 )
-import qualified GHC.TypeLits
 import           Type
 import           Control.Monad.Free
 import           Control.Monad.Indexed
 import qualified Control.Monad.Indexed.Free    as F
 
-data ProcF (i :: SType * *) (j :: SType * *) next where
+data ProcF (i :: SType Type Type) (j :: SType Type Type) next where
     Send :: (Serialise a) => Sing (n :: Nat) -> Core a -> next -> ProcF ('Free ('S n a j)) j next
     Recv :: (Serialise a) => Sing (n :: Nat) -> (Core a -> next) -> ProcF ('Free ('R n a j)) j next
     Branch :: (Serialise c) => Sing (n :: Nat) -> Proc' left ('Pure ()) c -> Proc' right ('Pure ()) c -> next -> ProcF ('Free ('B n left right j)) j next
     Select :: (Serialise a, Serialise b, Serialise c) => Sing (n :: Nat) -> Core (Either a b) -> (Core a -> Proc' left ('Pure ()) c) -> (Core b -> Proc' right ('Pure ()) c) -> next -> ProcF ('Free ('Se n left right j)) j next
 
 type Proc' i j a = F.IxFree ProcF i j (Core a)
-type Proc (i :: SType * *) a = forall j. F.IxFree ProcF (i >*> j) j (Core a)
+type Proc (i :: SType Type Type) a = forall j. F.IxFree ProcF (i >*> j) j (Core a)
 
 instance Functor (ProcF i j) where
     fmap f (Send a v n) = Send a v $ f n
@@ -89,50 +88,44 @@ a >> b = a >>= const b
 return :: IxMonad m => a -> m i i a
 return = ireturn
 
-data Process (k :: (SType * *, Nat)) a where
+data Process (k :: (SType Type Type, Nat)) a where
     Process :: Sing (a :: Nat) -> Proc' info ('Pure ()) val -> Process '(info, a) val
     -- Process :: Sing (a :: Nat) -> Proc info val -> Process '(info, a) val
 
-data PList (l::[*]) where
+data PList (l::[Type]) where
     PNil  :: PList '[]
     PCons :: Process k () -> PList l -> PList (Process k () ': l)
 
 type family DualityCons procs :: Constraint where
     DualityCons xs = DualityC (ExtractInfo xs)
 
-type family ExtractInfo procs :: [(SType * *, Nat)] where
+type family ExtractInfo procs :: [(SType Type Type, Nat)] where
     ExtractInfo '[] = '[]
     ExtractInfo (x ': xs) = ExtractProcessInfo x : ExtractInfo xs
 
-type family ExtractProcessInfo (c :: *) :: (SType * *, Nat) where
+type family ExtractProcessInfo (c :: Type) :: (SType Type Type, Nat) where
     ExtractProcessInfo (Process k _) = k
 
 test = do
-    send (SNat :: Sing 1) (Lit 10)
-    -- _x :: Core Integer <- recv (SNat :: Sing 1)
-    x :: Core (Either () ()) <- recv (SNat :: Sing 1)
-    select (SNat :: Sing 2)
-           x
-           (\_ -> recv (SNat :: Sing 2))
-           (\_ -> send (SNat :: Sing 2) (Lit 30))
+    send [snat|1|] (Lit 10)
+    -- _x :: Core Integer <- recv [snat|1|]
+    x :: Core (Either () ()) <- recv [snat|1|]
+    select [snat|2|] x (\_ -> recv [snat|2|]) (\_ -> send [snat|2|] (Lit 30))
     return Unit
 
 test1 = do
-    x :: Core Integer <- recv (SNat :: Sing 0)
-    send (SNat :: Sing 0) (Lit (Left () :: Either () ()))
+    x :: Core Integer <- recv [snat|0|]
+    send [snat|0|] (Lit (Left () :: Either () ()))
     return Unit
 
--- test2 = branch (SNat :: Sing 0) (send (SNat :: Sing 0) (Lit 20)) (send (SNat :: Sing 0) (Lit 40) >> recv (SNat :: Sing 0))
-test2 = branch (SNat :: Sing 0)
-               (send (SNat :: Sing 0) (Lit 20))
-               (recv (SNat :: Sing 0))
+test2 = branch [snat|0|] (send [snat|0|] (Lit 20)) (recv [snat|0|])
 
-p0 = Process (SNat :: Sing 0) test
-p1 = Process (SNat :: Sing 1) test1
-p2 = Process (SNat :: Sing 2) test2
+p0 = Process [snat|0|] test
+p1 = Process [snat|1|] test1
+p2 = Process [snat|2|] test2
 ps = PCons p0 (PCons p1 (PCons p2 PNil))
 
-a = send (SNat :: Sing 1) (Lit 10)
+a = send [snat|1|] (Lit 10)
 
 hello :: DualityCons xs => PList xs -> String
 hello _ = "f"

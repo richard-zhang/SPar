@@ -56,7 +56,7 @@ extra-deps:
 # flags: {}
 ghc-options:
     # All packages
-    "$locals": -Wmissing-signatures -Wunused-imports
+    "$locals": -Wunused-imports
 
 # Extra package databases containing global packages
 # extra-package-dbs: []

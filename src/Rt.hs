@@ -12,19 +12,14 @@
 {-# LANGUAGE ConstraintKinds #-}
 module Rt where
 
-import           Data.Type.Equality
-import           Data.Proxy
 import           Data.Either
-import           Data.Singletons.TypeLits
 import           Data.Singletons
+import           Data.Type.Natural              ( Nat )
 import           Control.Monad.Free
-import           Data.Kind
 import qualified Data.Map.Strict               as Map
 import           Control.Monad.Reader
 import           Control.Monad.Writer
 import           Control.Monad.State
-import           GHC.Natural
-import           Data.Typeable
 import           Language.Poly.Core             ( Core(Lit)
                                                 , Serialise
                                                 , interp
@@ -33,16 +28,15 @@ import           Def                     hiding ( (>>=)
                                                 , (>>)
                                                 , return
                                                 )
-import           Type
 import qualified Control.Monad.Indexed.Free    as F
 
-type ProcessRT a = (ProcRT a, Natural)
+type ProcessRT a = (ProcRT a, Nat)
 
 data ProcRTF next where
-    Send' :: (Serialise a) => Natural -> Core a -> next -> ProcRTF next
-    Recv' :: (Serialise a) => Natural -> (Core a -> next) -> ProcRTF next
-    Select' :: (Serialise a, Serialise b, Serialise c) => Natural -> Core (Either a b) -> (Core a -> ProcRT c) -> (Core b -> ProcRT c) -> next -> ProcRTF next
-    Branch' :: (Serialise c) => Natural -> ProcRT c -> ProcRT c -> next -> ProcRTF next
+    Send' :: (Serialise a) => Nat -> Core a -> next -> ProcRTF next
+    Recv' :: (Serialise a) => Nat -> (Core a -> next) -> ProcRTF next
+    Select' :: (Serialise a, Serialise b, Serialise c) => Nat -> Core (Either a b) -> (Core a -> ProcRT c) -> (Core b -> ProcRT c) -> next -> ProcRTF next
+    Branch' :: (Serialise c) => Nat -> ProcRT c -> ProcRT c -> next -> ProcRTF next
 
 instance Functor ProcRTF where
     fmap f (Send' r v n) = Send' r v $ f n
@@ -54,12 +48,12 @@ type ProcRT a = Free ProcRTF (Core a)
 
 data Label = L | R deriving (Show)
 
-type GlobalMq = Map.Map Natural (Map.Map Natural [Either String Label])
+type GlobalMq = Map.Map Nat (Map.Map Nat [Either String Label])
 type Gs = StateT GlobalMq (WriterT [ObservableAction] IO) ()
 
 data ObservableAction =
-    ASend Natural Natural String
-  | ARecv Natural Natural String
+    ASend Nat Nat String
+  | ARecv Nat Nat String
   | ASelect
   | ABranch
   deriving (Show)

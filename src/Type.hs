@@ -13,17 +13,12 @@
 {-# LANGUAGE ConstraintKinds #-}
 module Type where
 
-import           Data.Type.Equality
-import           Data.Proxy
 import           Prelude                 hiding ( Monad(..) )
-import           Data.Singletons.TypeLits
 import           Control.Monad.Free
+import           Data.Type.Natural              ( Nat )
 import           Data.Kind
-import qualified Data.Map.Strict               as Map
-import           GHC.Natural
-import           Language.Poly.Core             ( Core(..) )
 import qualified GHC.TypeLits
-import Data.Functor.Classes
+import           Data.Functor.Classes
 
 data STypeF a next where
     S :: Nat -> a -> next -> STypeF a next
@@ -41,8 +36,8 @@ instance (Eq a) => Eq1 (STypeF a) where
     liftEq eq (S r v n) (S r' v' n') = r == r' && v == v' && eq n n'
     liftEq eq (R r v n) (R r' v' n') = r == r' && v == v' && eq n n'
     -- TODO potential issue => don't care the result type of SType since it's not part of the protocols
-    liftEq eq (B r a b n) (B r' a' b' n') = r == r' && liftEq (\_ _ -> True) a a' && eq n n' 
-    liftEq eq (Se r a b n) (Se r' a' b' n') = r == r' && liftEq (\_ _ -> True) a a' && eq n n' 
+    liftEq eq (B r a b n) (B r' a' b' n') = r == r' && liftEq (\_ _ -> True) a a' && eq n n'
+    liftEq eq (Se r a b n) (Se r' a' b' n') = r == r' && liftEq (\_ _ -> True) a a' && eq n n'
 
 type SType a next = Free (STypeF a) next
 
