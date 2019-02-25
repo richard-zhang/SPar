@@ -15,20 +15,19 @@ module Rt where
 import           Data.Either
 import           Data.Singletons
 import           Data.Type.Natural              ( Nat )
+import           Data.Typeable
 import           Control.Monad.Free
 import qualified Data.Map.Strict               as Map
 import           Control.Monad.Reader
 import           Control.Monad.Writer
 import           Control.Monad.State
-import           Language.Poly.Core             ( Core(Lit)
-                                                , Serialise
-                                                , interp
-                                                )
 import           Def                     hiding ( (>>=)
                                                 , (>>)
                                                 , return
                                                 )
-import TypeValue
+import           Type
+import           TypeValue
+import           Language.Poly.Core
 import qualified Control.Monad.Indexed.Free    as F
 
 type ProcessRT a = (ProcRT a, Nat)
@@ -47,7 +46,7 @@ instance Functor ProcRTF where
 
 type ProcRT a = Free ProcRTF (Core a)
 
-data Label = L | R deriving (Show)
+data Label = Le | Ri deriving (Show)
 
 type GlobalMq = Map.Map Nat (Map.Map Nat [Either String Label])
 type Gs = StateT GlobalMq (WriterT [ObservableAction] IO) ()
@@ -59,8 +58,20 @@ data ObservableAction =
   | ABranch
   deriving (Show)
 
-convert :: ProcRT a -> STypeV a
-convert = undefined
+convert :: Integer -> ProcRT a -> STypeV ()
+convert _ (Pure a) = Pure ()
+convert n (Free (Send' r v next)) =
+    Free (S r (typeRep $ extractType v) $ convert n next)
+convert n (Free (Recv' r cont)) = Free
+    (R r (typeRep $ extractParamType cont) $ convert (n + 1) (cont $ Var n))
+convert n (Free (Select' r v cont1 cont2 next)) = Free
+    (Se r
+        (convert 1 (cont1 $ Var 0))
+        (convert 1 (cont2 $ Var 0))
+        (convert n next)
+    )
+convert n (Free (Branch' r left right next)) =
+    Free (B r (convert 0 left) (convert 0 right) (convert n next))
 
 eraseSessionInfo' :: Proc' i j a -> ProcRT a
 eraseSessionInfo' (F.Pure v) = Pure v
@@ -127,7 +138,7 @@ normalEval' act@(Free (Recv' sender cont), role) xs = do
         Nothing -> error "u"
 normalEval' (Free (Select' receiver choice left right next), role) xs = do
     let value = interp choice
-    let label = if isLeft value then Rt.L else Rt.R
+    let label = if isLeft value then Le else Ri
     env <- get
     put
         (Map.update (Just . Map.insertWith (flip (++)) role [Right label])
@@ -153,8 +164,8 @@ normalEval' act@(Free (Branch' sender left right next), role) xs = do
             normalEval
                 (  xs
                 ++ [ ( (case x of
-                           Rt.L -> left
-                           Rt.R -> right
+                           Le -> left
+                           Ri -> right
                        )
                          >> next
                      , role
@@ -168,7 +179,9 @@ eval' :: [ProcessRT ()] -> IO [ObservableAction]
 eval' xs = snd <$> runWriterT (runStateT (normalEval xs) (initialEnv xs))
 
 evalN2 :: [ProcessRT ()] -> IO [ObservableAction]
-evalN2 xs = if dualityC (fmap convert xs) then eval' xs else error "Not dual"
+evalN2 xs = if dualityC (fmap (\(a, b) -> (convert 0 a, b)) xs)
+    then eval' xs
+    else error "Not dual"
 
 evalN :: DualityCons xs => PList xs -> IO [ObservableAction]
 evalN = eval' . convert2Normal

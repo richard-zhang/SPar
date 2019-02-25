@@ -25,7 +25,7 @@ import           Data.Singletons
 import           Language.Poly.Core             ( Core(..)
                                                 , Serialise
                                                 )
-import Data.Kind
+import           Data.Kind
 import           Type
 import           Control.Monad.Free
 import           Control.Monad.Indexed
@@ -72,7 +72,7 @@ select
 select role var cont1 cont2 = liftF' $ Select role var cont1 cont2 Unit
 
 branch
-    :: (Show c, Read c)
+    :: (Serialise c)
     => Sing n
     -> Proc' left ( 'Pure ()) c
     -> Proc' right ( 'Pure ()) c
@@ -110,7 +110,10 @@ test = do
     send [snat|1|] (Lit 10)
     -- _x :: Core Integer <- recv [snat|1|]
     x :: Core (Either () ()) <- recv [snat|1|]
-    select [snat|2|] x (\_ -> recv [snat|2|]) (\_ -> send [snat|2|] (Lit 30))
+    select [snat|2|]
+           x
+           (\_ -> recv [snat|2|])
+           (\_ -> send [snat|2|] (Lit 30 :: Core Integer))
     return Unit
 
 test1 = do
@@ -125,7 +128,7 @@ p1 = Process [snat|1|] test1
 p2 = Process [snat|2|] test2
 ps = PCons p0 (PCons p1 (PCons p2 PNil))
 
-a = send [snat|1|] (Lit 10)
+a = send [snat|1|] (Lit 10 :: Core Int)
 
 hello :: DualityCons xs => PList xs -> String
 hello _ = "f"

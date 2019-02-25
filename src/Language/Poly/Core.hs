@@ -27,6 +27,8 @@ module Language.Poly.Core
   , interp
   , polyC
   , (:->)(..)
+  , extractType
+  , extractParamType
   ) where
 
 import Prelude hiding ( id, (.), fst, snd, const, curry )
@@ -48,7 +50,7 @@ infixr 4 :->
 
 type CC = Typeable
 
-type Serialise a = (Show a, Read a)
+type Serialise a = (Show a, Read a, Typeable a)
 
 class Show a => Value a where
 
@@ -214,6 +216,12 @@ dom _ = Proxy
 
 cod :: Core (a -> b) -> Proxy b
 cod _ = Proxy
+
+extractType :: Core a -> Proxy a
+extractType _ = Proxy
+
+extractParamType :: (Core a -> b) -> Proxy a
+extractParamType _ = Proxy
 
 instance Value a => Const CC a (:->) where
   const = Fun . Const . Val
