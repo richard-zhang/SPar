@@ -6,13 +6,14 @@
 :set -XTypeOperators 
 :set -XKindSignatures 
 :set -XMultiParamTypeClasses 
-:set -XFunctionalDependencies 
+:set -XFunctionalDependencies
 :set -XTypeFamilies 
 :set -XRankNTypes 
 :set -XGADTs
 :set -XPolyKinds
 :set -XQuasiQuotes
 :set -XConstraintKinds
+:set -XQuasiQuotes
 import Control.Monad.Free
 import Data.Singletons
 import Data.Singletons.TypeRepStar

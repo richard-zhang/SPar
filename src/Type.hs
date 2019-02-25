@@ -1,24 +1,23 @@
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE ConstraintKinds      #-}
+{-# LANGUAGE DataKinds            #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE GADTs                #-}
+{-# LANGUAGE KindSignatures       #-}
+{-# LANGUAGE PolyKinds            #-}
+{-# LANGUAGE RankNTypes           #-}
+{-# LANGUAGE ScopedTypeVariables  #-}
+{-# LANGUAGE TypeFamilies         #-}
+{-# LANGUAGE TypeInType           #-}
+{-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE RebindableSyntax #-}
-{-# LANGUAGE TypeInType #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE ConstraintKinds #-}
 module Type where
 
-import           Prelude                 hiding ( Monad(..) )
-import           Control.Monad.Free
-import           Data.Type.Natural              ( Nat )
-import           Data.Kind
+import Control.Monad.Free
+import Data.Functor.Classes
+import Data.Kind
+import Data.List (intercalate)
+import Data.Type.Natural (Nat)
 import qualified GHC.TypeLits
-import           Data.Functor.Classes
 
 data STypeF a next where
     S :: Nat -> a -> next -> STypeF a next
@@ -27,17 +26,24 @@ data STypeF a next where
     Se :: Nat -> SType a c -> SType a c -> next -> STypeF a next
 
 instance Functor (STypeF a) where
-    fmap f (S r a n) = S r a (f n)
-    fmap f (R r a n) = R r a (f n)
-    fmap f (B r a b n) = B r a b (f n)
+    fmap f (S r a n)    = S r a (f n)
+    fmap f (R r a n)    = R r a (f n)
+    fmap f (B r a b n)  = B r a b (f n)
     fmap f (Se r a b n) = B r a b (f n)
 
-instance (Eq a) => Eq1 (STypeF a) where
-    liftEq eq (S r v n) (S r' v' n') = r == r' && v == v' && eq n n'
-    liftEq eq (R r v n) (R r' v' n') = r == r' && v == v' && eq n n'
+instance Eq a => Eq1 (STypeF a) where
+    liftEq eq (S r v n) (S r' v' n')        = r == r' && v == v' && eq n n'
+    liftEq eq (R r v n) (R r' v' n')        = r == r' && v == v' && eq n n'
     -- TODO potential issue => don't care the result type of SType since it's not part of the protocols
-    liftEq eq (B r a b n) (B r' a' b' n') = r == r' && liftEq (\_ _ -> True) a a' && eq n n'
+    liftEq eq (B r a b n) (B r' a' b' n')   = r == r' && liftEq (\_ _ -> True) a a' && eq n n'
     liftEq eq (Se r a b n) (Se r' a' b' n') = r == r' && liftEq (\_ _ -> True) a a' && eq n n'
+
+instance Show a => Show1 (STypeF a) where
+    liftShowsPrec sp _ d (S role v n) = showsUnaryWith sp (intercalate " " ["Send", show $ fromEnum role, show v]) d n
+    liftShowsPrec sp _ d (R role v n) = showsUnaryWith sp (intercalate " " ["Recv", show $ fromEnum role, show v]) d n
+    -- replace the last value with Pure () so that it can be shown
+    liftShowsPrec sp _ d (B role a b n) = showsUnaryWith sp (intercalate " " ["Branch", show $ fromEnum role, "left:", show (a >> Pure ()), "right:", show (b >> Pure ())]) d n
+    liftShowsPrec sp _ d (Se role a b n) = showsUnaryWith sp (intercalate " " ["Select", show $ fromEnum role, "left:", show (a >> Pure ()), "right:", show (b >> Pure ())]) d n
 
 type SType a next = Free (STypeF a) next
 

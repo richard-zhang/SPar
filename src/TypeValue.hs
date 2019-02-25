@@ -1,10 +1,10 @@
 module TypeValue where
 
-import           Type
-import           Control.Monad.Free
-import           Data.Typeable
-import           Data.Type.Natural              ( Nat )
-import           Data.Functor.Classes
+import Control.Monad.Free
+import Data.Functor.Classes
+import Data.Type.Natural (Nat)
+import Data.Typeable
+import Type
 
 type STypeV a = SType TypeRep a
 
@@ -49,12 +49,3 @@ dualityC = and . fmap (uncurry isDualHelper) . handShake
       == project b aid
       && dual (project b aid) bid
       == project a bid
-
-proc1 :: STypeV ()
-proc1 = Free (S 1 (typeOf "str") (Pure ()))
-
-proc2 :: STypeV ()
-proc2 = Free (S 1 (typeOf 'c') (Pure ()))
-
-proc3 :: STypeV ()
-proc3 = Free (R 1 (typeOf "str") (Pure ()))

@@ -1,35 +1,28 @@
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE ConstraintKinds      #-}
+{-# LANGUAGE DataKinds            #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE GADTs                #-}
+{-# LANGUAGE KindSignatures       #-}
+{-# LANGUAGE PolyKinds            #-}
+{-# LANGUAGE QuasiQuotes          #-}
+{-# LANGUAGE RankNTypes           #-}
+{-# LANGUAGE RebindableSyntax     #-}
+{-# LANGUAGE ScopedTypeVariables  #-}
+{-# LANGUAGE TypeFamilies         #-}
+{-# LANGUAGE TypeInType           #-}
+{-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE RebindableSyntax #-}
-{-# LANGUAGE TypeInType #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE QuasiQuotes #-}
 module Def where
 
-import           Prelude                 hiding ( (>>)
-                                                , (>>=)
-                                                , return
-                                                )
-import           Data.Type.Natural              ( Nat
-                                                , snat
-                                                )
-import           Data.Singletons
-import           Language.Poly.Core             ( Core(..)
-                                                , Serialise
-                                                )
-import           Data.Kind
-import           Type
-import           Control.Monad.Free
-import           Control.Monad.Indexed
-import qualified Control.Monad.Indexed.Free    as F
+import Control.Monad.Free
+import Control.Monad.Indexed
+import qualified Control.Monad.Indexed.Free as F
+import Data.Kind
+import Data.Singletons
+import Data.Type.Natural (Nat, snat)
+import Language.Poly.Core (Core (..), Serialise)
+import Prelude hiding (return, (>>), (>>=))
+import Type
 
 data ProcF (i :: SType * *) (j :: SType * *) next where
     Send :: (Serialise a) => Sing (n :: Nat) -> Core a -> next -> ProcF ('Free ('S n a j)) j next
@@ -41,9 +34,9 @@ type Proc' i j a = F.IxFree ProcF i j (Core a)
 type Proc (i :: SType * *) a = forall j. F.IxFree ProcF (i >*> j) j (Core a)
 
 instance Functor (ProcF i j) where
-    fmap f (Send a v n) = Send a v $ f n
-    fmap f (Recv a cont) = Recv a (f . cont)
-    fmap f (Branch r left right n) = Branch r left right $ f n
+    fmap f (Send a v n)                  = Send a v $ f n
+    fmap f (Recv a cont)                 = Recv a (f . cont)
+    fmap f (Branch r left right n)       = Branch r left right $ f n
     fmap f (Select r v cont1 cont2 next) = Select r v cont1 cont2 (f next)
 
 instance IxFunctor ProcF where
