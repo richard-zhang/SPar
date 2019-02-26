@@ -25,7 +25,7 @@ instance Functor ProcRTF where
     fmap f (Send' r v n)               = Send' r v $ f n
     fmap f (Recv' r cont)              = Recv' r (f . cont)
     fmap f (Select' r v cont1 cont2 n) = Select' r v cont1 cont2 (f n)
-    fmap f (Branch' r left right n)         = Branch' r left right (f n)
+    fmap f (Branch' r left right n)    = Branch' r left right (f n)
 
 type ProcRT a = Free ProcRTF (Core a)
 
@@ -40,6 +40,9 @@ select' role var cont1 cont2 = liftF $ Select' role var cont1 cont2 Unit
 
 branch' :: Serialise c => Nat -> ProcRT c -> ProcRT c -> ProcRT ()
 branch' role left right = liftF $ Branch' role left right Unit
+
+convert' :: ProcRT a -> STypeV ()
+convert' = convert 0
 
 convert :: Integer -> ProcRT a -> STypeV ()
 convert _ (Pure a) = Pure ()
@@ -80,3 +83,7 @@ eraseSessionInfo' (F.Free (Branch (r :: Sing (n :: Nat)) left right next)) =
 
 eraseSessionInfo :: Process k a -> ProcessRT a
 eraseSessionInfo (Process n value) = (eraseSessionInfo' value, fromSing n)
+
+convert2Normal :: PList xs -> [ProcessRT ()]
+convert2Normal PNil         = []
+convert2Normal (PCons p ps) = eraseSessionInfo p : convert2Normal ps

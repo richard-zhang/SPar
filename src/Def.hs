@@ -116,12 +116,15 @@ test1 = do
 
 test2 = branch [snat|0|] (send [snat|0|] (Lit 20)) (recv [snat|0|])
 
+test3 = select [snat|2|] (Lit (Right () :: Either () ())) (\_ -> recv [snat|2|]) (\_ -> send [snat|2|] (Lit 30 :: Core Integer))
+
 p0 = Process [snat|0|] test
 p1 = Process [snat|1|] test1
 p2 = Process [snat|2|] test2
+p3 = Process [snat|0|] test3
 ps = PCons p0 (PCons p1 (PCons p2 PNil))
 
-a = send [snat|1|] (Lit 10 :: Core Int)
+ps2 = PCons p2 (PCons p3 PNil)
 
 hello :: DualityCons xs => PList xs -> String
 hello _ = "f"

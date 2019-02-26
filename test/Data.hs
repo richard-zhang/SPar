@@ -36,4 +36,3 @@ proc2 = Free (S 1 (typeOf 'c') (Pure ()))
 
 proc3 :: STypeV ()
 proc3 = Free (R 1 (typeOf "str") (Pure ()))
-
