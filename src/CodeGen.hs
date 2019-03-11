@@ -17,6 +17,9 @@ import CodeGen.Type
 import Language.Poly.Core
 import RtDef
 
+testCodeGen :: [ProcessRT Int] -> CTranslUnit
+testCodeGen xs = evalCodeGen $ traverseToCodeGen singleTypeInt xs
+
 traverseToCodeGen :: Monad m => SingleType a -> [ProcessRT a] -> CodeGen m [(Nat, (Seq Instr))]
 traverseToCodeGen stype = flip forM $ uncurry $ helper stype
 
@@ -30,7 +33,8 @@ helper_ stype (Free (Send' receiver exp next)) role = do
     cid <- getChannelAndUpdateChanTable chanKey role
     -- TODO use singleTypeInt for now, will replace with singleType gained by pattern matching
     let chan = Channel cid singleTypeInt
-    let instrs = Seq.fromList [CInitChan chan, CSend chan (Exp (unsafeCoerce exp) singleTypeInt)]
+    -- let instrs = Seq.fromList [CInitChan chan, CSend chan (Exp (unsafeCoerce exp) singleTypeInt)]
+    let instrs = Seq.fromList [CSend chan (Exp (unsafeCoerce exp) singleTypeInt)]
     restOfInstrs <- helper_ stype next role
     return (instrs Seq.>< restOfInstrs)
 helper_ stype (Free (Recv' sender cont)) role = do

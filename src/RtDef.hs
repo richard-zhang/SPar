@@ -156,3 +156,15 @@ typeInfer proc = withProcRT proc (const . SomeSType)
 
 
 a = SPure (Proxy :: Proxy Int)
+
+cgt0 = do
+    send' one (Lit 10 :: Core Int)
+    x :: Core Int <- recv' one 
+    return x
+
+cgt1 = do
+    x :: Core Int <- recv' zero
+    send' zero (Lit 20 :: Core Int)
+    return x
+
+cgts = [(cgt0, zero), (cgt1, one)]

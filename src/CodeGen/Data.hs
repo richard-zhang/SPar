@@ -1,14 +1,15 @@
 {-# LANGUAGE GADTs #-}
 module CodeGen.Data where
 
+import Data.Foldable
 import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
 import Data.Type.Natural (Nat)
-import Language.C.Syntax.AST
 import Language.C
 import Unsafe.Coerce
 
 import CodeGen.Type
+import CodeGen.Utils
 import Language.Poly.Core
 
 type CID = Int
@@ -32,5 +33,96 @@ data ChanKey = ChanKey { chanCreator :: Nat, chanDestroyer :: Nat } deriving (Eq
 convertToCExpr :: Exp a -> CExpr
 convertToCExpr (Exp exp _) =
     case exp of
-        Lit x -> CConst (CIntConst (cInteger (fromIntegral (unsafeCoerce x :: Int))) undefNode) 
+        Lit x   -> CConst (CIntConst (cInteger (fromIntegral (unsafeCoerce x :: Int))) undefNode)
         Var num -> CVar (internalIdent $ "v" ++ show num) undefNode
+
+pthreadCreate_ :: CExpr -> CExpr -> CExpr -> CExpr -> CExpr
+pthreadCreate_ a b c d = (cVar "pthread_create") # [a, b , c, d]
+
+pthreadCreate :: CExpr -> CExpr -> CExpr
+pthreadCreate a b = (cVar "pthread_create") # [a, cVar "NULL" , b, cVar "NULL"]
+
+threadName :: Nat -> String
+threadName role = "th" ++ (show $ fromEnum role)
+
+declThread :: Nat -> CDecl
+declThread role = decl (CTypeSpec pthreadSpec) (cDeclr $ threadName role) Nothing
+
+runThread :: Nat -> CExpr
+runThread role = pthreadCreate (pre Addr $ cVar $ threadName role) (cVar $ procName role)
+
+chanInit :: CExpr
+chanInit = (cVar "chan_init") # [cInt 1]
+
+chanDispose :: CExpr -> CExpr
+chanDispose a = (cVar "chan_dispose") # [a]
+
+chanSendInt :: CExpr -> CExpr -> CExpr
+chanSendInt a b = (cVar "chan_send_int") # [a, b]
+
+chanRecvInt :: CExpr -> CExpr -> CExpr
+chanRecvInt a b = (cVar "chan_recv_int") # [a, b]
+
+-- pthread_t th;
+-- pthread_create(&th, NULL, ping, NULL);
+
+chanName__ :: CID -> String
+chanName__ = ("c" ++ ). show
+
+chanName_ :: Channel a -> String
+chanName_ (Channel cid _) = chanName__ cid
+
+chanName :: Channel a -> CExpr
+chanName = cVar . chanName_
+
+chanSpec :: CTypeSpec
+chanSpec = ty $ internalIdent "chan_t"
+
+pthreadSpec :: CTypeSpec
+pthreadSpec = ty $ internalIdent "pthread_t"
+
+chanDecl :: CID -> CDecl
+chanDecl cid = decl (CTypeSpec chanSpec) (ptr $ cDeclr $ chanName__ cid) Nothing
+
+varName_ :: Int -> String
+varName_ a = "v" ++ show a
+
+varName :: Int -> CExpr
+varName = cVar . varName_
+
+declAndRunThread :: Nat -> [CBlockItem]
+declAndRunThread role = [CBlockDecl $ declThread role, liftEToB $ runThread role]
+
+instrToCBlock :: Instr -> CBlockItem
+instrToCBlock (CInitChan chan)   = liftEToB $ (chanName chan) <-- chanInit
+instrToCBlock (CDeleteChan chan) = liftEToB $ chanDispose (chanName chan)
+instrToCBlock (CSend chan expr)   = liftEToB $ chanSendInt (chanName chan) $ convertToCExpr expr
+instrToCBlock (CRecv chan expr)   = liftEToB $ chanRecvInt (chanName chan) $ pre Addr $ convertToCExpr expr
+instrToCBlock (CDecla var _)     = CBlockDecl $ decl intTy (cDeclr (varName_ var)) Nothing
+instrToCBlock (CEnd _ _)         = CBlockStmt cvoidReturn
+
+instrsToS :: Seq Instr -> CStat
+instrsToS xs = CCompound [] (fmap instrToCBlock (toList xs)) undefNode
+
+chanDecls :: CID -> [CExtDecl]
+chanDecls cid = fmap (CDeclExt . chanDecl) [1..cid-1]
+
+procName :: Nat -> String
+procName name = "proc" ++ (show $ fromEnum name)
+
+instrToFunc :: Nat -> Seq Instr -> CFunDef
+instrToFunc role instrs = fun [voidTy] (procName role) [] (instrsToS instrs)
+
+mainFuncStat :: CID -> [Nat] -> CStat
+mainFuncStat cid roles = CCompound [] (fmap (\chan -> liftEToB $ (cVar $ chanName__ chan) <-- chanInit) [1 .. cid - 1] ++ (roles >>= declAndRunThread) ++ [CBlockStmt $ creturn $ cInt 0]) undefNode
+
+mainFunc :: CID -> [Nat] -> CFunDef
+mainFunc cid roles = fun [intTy] "main" [] (mainFuncStat cid roles)
+
+codeGenCombined :: [(Nat, Seq Instr)] -> CID -> CTranslUnit
+codeGenCombined instrs cid = CTranslUnit (channelDecls ++ main ++ funcs) undefNode
+    where
+        roles = fmap fst instrs
+        channelDecls = chanDecls cid
+        main = [CFDefExt $ mainFunc cid roles]
+        funcs = fmap (CFDefExt . uncurry instrToFunc) instrs

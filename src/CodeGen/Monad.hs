@@ -17,7 +17,7 @@ import RtDef
 data CodeGenState = CodeGenState
   {
     chanTable :: Map ChanKey (Seq CID),
-    flagTable :: Map ChanKey Nat, -- flag to indiciate which process is encounter first in the code generation
+    flagTable :: Map ChanKey Nat, -- flag to indiciate which process is encountered first in the code generation
     varNext   :: Int,
     chanNext  :: CID
   }
@@ -26,10 +26,12 @@ newtype CodeGen m a = CodeGen { runCodeGen :: StateT CodeGenState m a }
     deriving (Functor, Applicative, Monad, MonadState CodeGenState)
 
 evalCodeGen :: CodeGen Identity [(Nat, (Seq Instr))] -> CTranslUnit
-evalCodeGen = undefined
+evalCodeGen ma = codeGenCombined instrs (chanNext st)
+    where 
+        Identity (instrs, st) = runStateT (runCodeGen ma) initCodeGenState
 
 initCodeGenState :: CodeGenState
-initCodeGenState = CodeGenState { chanTable = Map.empty, flagTable = Map.empty, varNext = 0, chanNext = 0 }
+initCodeGenState = CodeGenState { chanTable = Map.empty, flagTable = Map.empty, varNext = 0, chanNext = 1 }
 
 freshChanName :: Monad m => CodeGen m CID
 freshChanName = state $ \s@CodeGenState{..} -> (chanNext, s { chanNext = chanNext + 1})

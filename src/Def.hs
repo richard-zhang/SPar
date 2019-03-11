@@ -126,6 +126,17 @@ ps = PCons p0 (PCons p1 (PCons p2 PNil))
 
 ps2 = PCons p2 (PCons p3 PNil)
 
+cgTest0 = send [snat|1|] (Lit 10 :: Core Int)
+
+cgTest1 = do 
+    x :: Core Int <- recv [snat|0|]
+    return x
+
+pcg0 = Process [snat|0|] cgTest0
+pcg1 = Process [snat|1|] cgTest1
+
+-- cglist = PCons pcg0 (PCons pcg1 PNil)
+
 hello :: DualityCons xs => PList xs -> String
 hello _ = "f"
 
