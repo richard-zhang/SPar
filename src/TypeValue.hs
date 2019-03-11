@@ -4,7 +4,7 @@ import Control.Monad.Free
 import Data.Functor.Classes
 import Data.Type.Natural (Nat)
 import Data.Typeable
-import Type
+import Type hiding (project, dual)
 
 type STypeV a = SType TypeRep a
 

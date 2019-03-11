@@ -3,5 +3,4 @@ module SPar
     )
 where
 
-import           Language.Poly                 as X
 import           Type                          as X

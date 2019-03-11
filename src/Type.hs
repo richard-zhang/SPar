@@ -1,23 +1,28 @@
-{-# LANGUAGE ConstraintKinds      #-}
-{-# LANGUAGE DataKinds            #-}
-{-# LANGUAGE FlexibleInstances    #-}
-{-# LANGUAGE GADTs                #-}
-{-# LANGUAGE KindSignatures       #-}
-{-# LANGUAGE PolyKinds            #-}
-{-# LANGUAGE RankNTypes           #-}
-{-# LANGUAGE ScopedTypeVariables  #-}
-{-# LANGUAGE TypeFamilies         #-}
-{-# LANGUAGE TypeInType           #-}
-{-# LANGUAGE TypeOperators        #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ConstraintKinds        #-}
+{-# LANGUAGE DataKinds              #-}
+{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE GADTs                  #-}
+{-# LANGUAGE KindSignatures         #-}
+{-# LANGUAGE PolyKinds              #-}
+{-# LANGUAGE RankNTypes             #-}
+{-# LANGUAGE ScopedTypeVariables    #-}
+{-# LANGUAGE TypeFamilies           #-}
+{-# LANGUAGE TypeFamilyDependencies #-}
+{-# LANGUAGE TypeInType             #-}
+{-# LANGUAGE TypeOperators          #-}
+{-# LANGUAGE UndecidableInstances   #-}
 module Type where
 
 import Control.Monad.Free
 import Data.Functor.Classes
 import Data.Kind
-import Data.List (intercalate)
+import Data.Singletons
+import Data.Singletons.Decide
+import Data.Singletons.TypeRepStar
 import Data.Type.Natural (Nat)
 import qualified GHC.TypeLits
+import Type.Reflection
 
 data STypeF a next where
     S :: Nat -> a -> next -> STypeF a next
@@ -39,22 +44,67 @@ instance Eq a => Eq1 (STypeF a) where
     liftEq eq (Se r a b n) (Se r' a' b' n') = r == r' && liftEq (\_ _ -> True) a a' && eq n n'
 
 instance Show a => Show1 (STypeF a) where
-    liftShowsPrec sp _ d (S role v n) = showsUnaryWith sp (intercalate " " ["Send", show $ fromEnum role, show v]) d n
-    liftShowsPrec sp _ d (R role v n) = showsUnaryWith sp (intercalate " " ["Recv", show $ fromEnum role, show v]) d n
+    liftShowsPrec sp _ d (S role v n) = showsUnaryWith sp (unwords ["Send", show $ fromEnum role, show v]) d n
+    liftShowsPrec sp _ d (R role v n) = showsUnaryWith sp (unwords ["Recv", show $ fromEnum role, show v]) d n
     -- replace the last value with Pure () so that it can be shown
-    liftShowsPrec sp _ d (B role a b n) = showsUnaryWith sp (intercalate " " ["Branch", show $ fromEnum role, "left:", show (a >> Pure ()), "right:", show (b >> Pure ())]) d n
-    liftShowsPrec sp _ d (Se role a b n) = showsUnaryWith sp (intercalate " " ["Select", show $ fromEnum role, "left:", show (a >> Pure ()), "right:", show (b >> Pure ())]) d n
+    liftShowsPrec sp _ d (B role a b n) = showsUnaryWith sp (unwords ["Branch", show $ fromEnum role, "left:", show (a >> Pure ()), "right:", show (b >> Pure ())]) d n
+    liftShowsPrec sp _ d (Se role a b n) = showsUnaryWith sp (unwords ["Select", show $ fromEnum role, "left:", show (a >> Pure ()), "right:", show (b >> Pure ())]) d n
 
 type SType a next = Free (STypeF a) next
 
-type family (>*>) (a :: SType * c) (b :: SType * c) :: SType * c where
+data instance Sing (t :: SType * *) where
+    SPure :: Typeable (a :: *) => Proxy a -> Sing ('Pure a :: SType * *)
+    SSend :: Typeable (a :: *) => Sing (r :: Nat) -> Proxy a -> Sing (n :: SType * *) -> Sing ('Free ('S r a n))
+    SRecv :: Typeable (a :: *) => Sing (r :: Nat) -> Proxy a -> Sing (n :: SType * *) -> Sing ('Free ('R r a n))
+    SBranch :: Sing (r :: Nat) -> Sing (left :: SType * *) -> Sing (right :: SType * *) -> Sing (n :: SType * *) -> Sing ('Free ('B r left right n))
+    SSelect :: Sing (r :: Nat) -> Sing (left :: SType * *) -> Sing (right :: SType * *) -> Sing (n :: SType * *) -> Sing ('Free ('Se r left right n))
+
+data SomeSType where
+    SomeSType :: forall (n :: SType * *). Sing n -> SomeSType
+
+instance SDecide (SType Type Type) where
+    (SPure (a :: Proxy l)) %~ (SPure (b :: Proxy r)) = case (p2s a) %~ (p2s b) of
+        Proved (Refl :: l :~: r) -> Proved (Refl :: 'Pure l :~: 'Pure r)
+        Disproved _              -> Disproved undefined
+    (SSend r1 v1 next1) %~ (SSend r2 v2 next2) = case
+        (r1 %~ r2, (p2s v1) %~ (p2s v2), next1 %~ next2) of
+        (Proved Refl, Proved Refl, Proved Refl) -> Proved Refl
+        _                                       -> Disproved undefined
+    _ %~ _ = Proved undefined
+
+p2s :: Typeable (a :: *) => Proxy a -> Sing a
+p2s = STypeRep . p2t where p2t (Proxy :: Proxy b) = typeRep :: TypeRep b
+
+-- duality :: [(SomeSType, SomeSing Nat)] -> Bool 
+-- duality procs = allProved $ fmap helper $ handShake procs
+--     where
+--         handShake []       = []
+--         handShake (x : xs) = fmap ((,) x) xs ++ handShake xs
+--         helper ((SomeSType a, SomeSing aid), (SomeSType b, SomeSing bid)) =
+--             project a bid %~ project b aid
+--         allProved [] = True
+--         allProved (x : xs) = case x of
+--             Proved Refl -> True
+--             Disproved _ -> False
+
+project :: Sing (a :: SType * *) -> Sing (r :: Nat) -> Sing (Project a r)  
+project (SPure val) _ = SPure val
+project (SSend role val next) n = case role %~ n of
+    Proved Refl -> (SSend role val (project next n))
+    Disproved _ -> undefined
+    -- Disproved f -> project next n
+
+dual :: Sing (a :: SType * *) -> Sing (r :: Nat) -> Sing (Dual a r :: SType * *)
+dual = undefined
+
+type family (>*>) (a :: SType * c) (b :: SType * c) where
     'Free ('S r v n) >*> b = 'Free ('S r v (n >*> b))
     'Free ('R r v n) >*> b = 'Free ('R r v (n >*> b))
     'Free ('B r n1 n2 n3) >*> b = 'Free ('B r n1 n2 (n3 >*> b))
     'Free ('Se r n1 n2 n3) >*> b = 'Free ('Se r n1 n2 (n3 >*> b))
     'Pure _ >*> b = b
 
-type family Project (a :: SType * c) (r :: Nat) :: SType * c where
+type family Project (a :: SType * c) (r :: Nat) where
     Project ('Pure b) _ = ('Pure b)
     Project ('Free ('S r0 v next)) r0 = 'Free ('S r0 v (Project next r0))
     Project ('Free ('R r0 v next)) r0 = 'Free ('R r0 v (Project next r0))

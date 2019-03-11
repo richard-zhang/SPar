@@ -14,7 +14,6 @@
 :set -XQuasiQuotes
 :set -XConstraintKinds
 :set -XQuasiQuotes
+:set -XTypeApplications
 import Control.Monad.Free
 import Data.Singletons
-import Data.Singletons.TypeRepStar
-import Data.Type.Natural
