@@ -19,20 +19,27 @@ import Language.Poly.Core
 import Type
 import Type.Reflection
 import TypeValue
+import CodeGen.Type
 
 type ProcessRT a = (ProcRT a, Nat)
 
 data ProcRTF next where
-    Send' :: (Serialise a) => Nat -> Core a -> next -> ProcRTF next
-    Recv' :: (Serialise a) => Nat -> (Core a -> next) -> ProcRTF next
+    Send' :: (Serialise a)  => Nat -> Core a -> next -> ProcRTF next
+    Recv' :: (Serialise a)  => Nat -> (Core a -> next) -> ProcRTF next
     Select' :: (Serialise a, Serialise b, Serialise c) => Nat -> Core (Either a b) -> (Core a -> ProcRT c) -> (Core b -> ProcRT c) -> next -> ProcRTF next
     Branch' :: (Serialise c) => Nat -> ProcRT c -> ProcRT c -> next -> ProcRTF next
+
+    Rec' :: Integer -> next -> ProcRTF next
+    Mu' :: Integer -> ProcRTF next
 
 instance Functor ProcRTF where
     fmap f (Send' r v n)               = Send' r v $ f n
     fmap f (Recv' r cont)              = Recv' r (f . cont)
     fmap f (Select' r v cont1 cont2 n) = Select' r v cont1 cont2 (f n)
     fmap f (Branch' r left right n)    = Branch' r left right (f n)
+
+    fmap f (Rec' var n)                = Rec' var (f n)
+    fmap f (Mu' var)                   = Mu' var
 
 type ProcRT a = Free ProcRTF (Core a)
 
@@ -41,6 +48,12 @@ send' role value = liftF $ Send' role value value
 
 recv' :: Serialise a => Nat -> ProcRT a
 recv' role = liftF $ Recv' role id
+
+rec' :: Integer -> ProcRT a -> ProcRT a
+rec' var body = Free $ Rec' var body
+
+mu' :: Integer -> ProcRT a
+mu' var = liftF $ Mu' var
 
 select'
     :: (Serialise a, Serialise b, Serialise c)
@@ -127,20 +140,20 @@ typeInferWithRole (proc, role) = withSomeSing role (\r -> withProcRT proc (const
 
 -- typeInferList :: Typeable a => [ProcessRT a] -> Bool
 -- typeInferList procs = allTrue $ fmap helper $ handShake $ map typeInferWithRole procs
---     where 
+--     where
 --         helper (SomeTypingInfo aid proca, SomeTypingInfo bid procb) =
 --             (Type.dual (Type.project proca bid) aid) %~ (Type.project procb aid)
 --         allTrue [] = True
---         allTrue (x : xs) = case x of 
+--         allTrue (x : xs) = case x of
 --             Proved _ -> allTrue xs
 --             Disproved _ -> False
 
 handShake :: [a] -> [(a, a)]
-handShake [] = []
+handShake []       = []
 handShake (x : xs) = fmap ((,) x) xs ++ handShake xs
 
 t1 = do
-    send' one (Lit 10 :: Core Integer)
+    send' one (Lit 10 :: Core Int)
     send' two (Lit 20 :: Core Int)
     return Unit
 
@@ -149,7 +162,7 @@ typeCheck proc providedType = case typeInfer proc of
     SomeSType inferedType ->
         case providedType %~ inferedType of
             Proved Refl -> Just providedType
-            _        -> Nothing
+            _           -> Nothing
 
 typeInfer :: Typeable a => ProcRT a -> SomeSType
 typeInfer proc = withProcRT proc (const . SomeSType)
@@ -159,12 +172,20 @@ a = SPure (Proxy :: Proxy Int)
 
 cgt0 = do
     send' one (Lit 10 :: Core Int)
-    x :: Core Int <- recv' one 
+    x :: Core Int <- recv' one
     return x
 
 cgt1 = do
     x :: Core Int <- recv' zero
     send' zero (Lit 20 :: Core Int)
     return x
+
+bad = do
+    x :: Core Int <- recv' zero
+    bad
+
+good = rec' 0 $ do
+    x :: Core Int <- recv' zero
+    mu' 0
 
 cgts = [(cgt0, zero), (cgt1, one)]

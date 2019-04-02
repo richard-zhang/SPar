@@ -13,8 +13,14 @@ cDeclr str = CDeclr (Just $ internalIdent str) [] Nothing [] undefNode
 cInt :: Integer -> CExpr
 cInt val = CConst (CIntConst (cInteger val) undefNode)
 
+defTy :: String -> CDeclSpec
+defTy str = CTypeSpec $ CTypeDef (internalIdent str) undefNode
+
 intTy :: CDeclSpec
 intTy = CTypeSpec $ CIntType undefNode
+
+floatTy :: CDeclSpec
+floatTy = CTypeSpec $ CFloatType undefNode
 
 voidTy  :: CDeclSpec
 voidTy = CTypeSpec $ CVoidType undefNode
@@ -41,6 +47,13 @@ liftE e = CExpr (Just e) undefNode
 liftEToB :: CExpr -> CBlockItem
 liftEToB = CBlockStmt . liftE
 
+cifElse :: CExpr -> CStat -> CStat -> CStat
+cifElse exp th el = CIf exp th (Just el) undefNode
+
+(&) :: CExpr -> String -> CExpr
+struct & field = CMember struct (fromString field) False undefNode
+infixl 8 &
+
 data UnOp = PlusPlus
           | MinusMinus
           | Minus
@@ -58,6 +71,12 @@ toCUnaryOp Not   = CNegOp
 toCUnaryOp Addr  = CAdrOp
 toCUnaryOp Ind   = CIndOp
 
+cOp :: CBinaryOp -> CExpr -> CExpr -> CExpr
+cOp op a b = CBinary op a b undefNode
+
+(==:) :: CExpr -> CExpr -> CExpr
+(==:) = cOp CEqOp
+
 pre   :: UnOp -> CExpr -> CExpr
 PlusPlus   `pre` exp = CUnary CPreIncOp exp undefNode
 MinusMinus `pre` exp = CUnary CPreDecOp exp undefNode
@@ -68,6 +87,9 @@ cvoidReturn = CReturn Nothing undefNode
 
 creturn :: CExpr -> CStat
 creturn = flip CReturn undefNode . Just
+
+block :: [CBlockItem] -> CStat
+block = flip (CCompound []) undefNode
 
 decl :: CDeclSpec       -- ^ The declaration specifier, usually this is a type
         -> CDeclr      -- ^ Equivalent to the name of the object being declared. Often this will
@@ -91,6 +113,18 @@ annotatedFun specs name args annots body = CFunDef specs decl [] body undefNode
                Nothing attrs undefNode
         attrs :: [CAttr]
         attrs = map (\ s -> CAttr (fromString s) [] undefNode) annots
+
+initExp :: CExpr -> CInit
+initExp exp = CInitExpr exp undefNode
+
+initList :: CInitList -> CInit
+initList xs = CInitList xs undefNode
+
+memberDesig :: String -> CDesignator
+memberDesig str = CMemberDesig (internalIdent str) undefNode
+
+empCompoundLit :: CInitList -> CExpr
+empCompoundLit xs = CCompoundLit (CDecl [] [] undefNode) xs undefNode
 
 instance IsString Ident where
     fromString = internalIdent

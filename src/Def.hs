@@ -19,7 +19,7 @@ import Control.Monad.Indexed
 import qualified Control.Monad.Indexed.Free as F
 import Data.Kind
 import Data.Singletons
-import Data.Type.Natural (Nat, snat)
+import Data.Type.Natural (Nat, snat, ZSym0)
 import Language.Poly.Core (Core (..), Serialise)
 import Prelude hiding (return, (>>), (>>=))
 import Type
@@ -100,23 +100,27 @@ type family ExtractProcessInfo (c :: *) :: (SType * *, Nat) where
     ExtractProcessInfo (Process k _) = k
 
 test = do
-    send [snat|1|] (Lit 10)
+    send [snat|1|] (Lit 10 :: Core Int)
     -- _x :: Core Integer <- recv [snat|1|]
     x :: Core (Either () ()) <- recv [snat|1|]
     select [snat|2|]
            x
            (\_ -> recv [snat|2|])
-           (\_ -> send [snat|2|] (Lit 30 :: Core Integer))
+           (\_ -> send [snat|2|] (Lit 30 :: Core Int))
     return Unit
 
 test1 = do
-    x :: Core Integer <- recv [snat|0|]
+    x :: Core Int <- recv [snat|0|]
     send [snat|0|] (Lit (Left () :: Either () ()))
     return Unit
 
-test2 = branch [snat|0|] (send [snat|0|] (Lit 20)) (recv [snat|0|])
+-- rbad = do
+--     x :: Core Integer <- recv [snat|0|]
+--     rbad
 
-test3 = select [snat|2|] (Lit (Right () :: Either () ())) (\_ -> recv [snat|2|]) (\_ -> send [snat|2|] (Lit 30 :: Core Integer))
+test2 = branch [snat|0|] (send [snat|0|] (Lit 20 :: Core Int)) (recv [snat|0|])
+
+test3 = select [snat|2|] (Lit (Right () :: Either () ())) (\_ -> recv [snat|2|]) (\_ -> send [snat|2|] (Lit 30 :: Core Int))
 
 p0 = Process [snat|0|] test
 p1 = Process [snat|1|] test1

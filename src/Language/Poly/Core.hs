@@ -45,12 +45,13 @@ import Data.Text.Prettyprint.Doc ( Pretty(..) )
 import Data.Text.Prettyprint.EDoc
 import Language.Poly.Type
 import Data.Constraint ( Dict(..) )
+import CodeGen.Type
 
 infixr 4 :->
 
 type CC = Typeable
 
-type Serialise a = (Show a, Read a, Typeable a)
+type Serialise a = (Repr a, Show a, Read a, Typeable a)
 
 class Show a => Value a where
 
