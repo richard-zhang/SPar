@@ -4,12 +4,13 @@
 module CodeGen.Type where
 
 import Data.Bits
+import Data.Typeable
 import Foreign.Storable                                             ( Storable )
 
 data SingleType a where
     NumSingleType :: NumType a -> SingleType a
     LabelSingleType :: SingleType Label
-    UnionSingleType :: SingleType a -> SingleType  b -> SingleType (Either a b)
+    UnionSingleType :: (Typeable a, Typeable b) => SingleType a -> SingleType b -> SingleType (Either a b)
     UnitSingleType :: SingleType ()
 
 data NumType a where
@@ -24,7 +25,7 @@ data FloatingType a where
 
 
 data IntegralDict a where
-    IntegralDict :: ( Bounded a, Eq a, Ord a, Show a
+    IntegralDict :: ( Typeable a, Bounded a, Eq a, Ord a, Show a
                     , Bits a, FiniteBits a, Integral a, Num a, Real a, Storable a )
                     => IntegralDict a
     -- IntegralDict :: ( Bounded a, Eq a, Ord a, Show a
@@ -32,13 +33,13 @@ data IntegralDict a where
                     -- => IntegralDict a
     
 data FloatingDict a where
-    FloatingDict :: ( Eq a, Ord a, Show a
+    FloatingDict :: ( Typeable a, Eq a, Ord a, Show a
                     , Floating a, Fractional a, Num a, Real a, RealFrac a
                     , RealFloat a, Storable a )
                     => FloatingDict a
 
 data Label = Le | Ri
-    deriving (Eq, Show)
+    deriving (Eq, Show, Typeable)
 
 typeInt :: IntegralType Int
 typeInt = TypeInt (IntegralDict @Int)
@@ -61,7 +62,7 @@ singleTypeLabel = LabelSingleType
 singleTypeUnionInt :: SingleType (Either Int Int)
 singleTypeUnionInt = UnionSingleType singleTypeInt singleTypeInt
 
-class Repr a where
+class Typeable a => Repr a where
     singleType :: SingleType a
 
 instance Repr () where

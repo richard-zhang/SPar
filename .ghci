@@ -17,3 +17,5 @@
 :set -XTypeApplications
 import Control.Monad.Free
 import Data.Singletons
+import Language.C.Pretty
+import Language.C

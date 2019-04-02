@@ -1,12 +1,16 @@
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 
 module CodeGen.Data where
 
 import Data.Char
 import Data.Foldable
+import Data.List (intercalate)
 import Data.Sequence (Seq)
-import qualified Data.Sequence as Seq
+import Data.String
 import Data.Type.Natural (Nat)
+import Data.Typeable
 import Language.C
 import Unsafe.Coerce
 
@@ -38,6 +42,23 @@ data Instr where
     -- the second int represents the value of the label
   CEither2Label :: Int -> Int -> Instr
 
+instrToCBlock :: Instr -> CBlockItem
+instrToCBlock (CInitChan chan) = liftEToB $ (chanName chan) <-- chanInit
+instrToCBlock (CDeleteChan chan) = liftEToB $ chanDispose (chanName chan)
+instrToCBlock (CSend chan expr) = liftEToB $ chanSendInt (chanName chan) $ convertToCExpr expr
+instrToCBlock (CRecv chan expr) = liftEToB $ chanRecvInt (chanName chan) $ pre Addr $ convertToCExpr expr
+instrToCBlock (CDecla var stype) = CBlockDecl $ stypeToCDecl stype var
+instrToCBlock (CAssgn x value) = liftEToB $ (varName x) <-- convertToCExpr value
+instrToCBlock (CEnd _ _) = CBlockStmt cvoidReturn
+instrToCBlock (CBranch exp left right) =
+  CBlockStmt $ cifElse (convertToCExpr exp ==: cVar "LEFT") (instrsToS left) (instrsToS right)
+instrToCBlock (CSelect x y z left right) =
+  CBlockStmt $ cifElse ((varName x & "label") ==: cVar "LEFT") leftPart rightPart
+  where
+    leftPart = block $ (liftEToB $ (varName y) <-- varName x & "value" & "left") : (fmap instrToCBlock (toList left))
+    rightPart = block $ (liftEToB $ (varName z) <-- varName x & "value" & "right") : (fmap instrToCBlock (toList right))
+instrToCBlock (CEither2Label x y) = liftEToB $ (varName y) <-- (varName x & "label")
+
 data ChanKey = ChanKey
   { chanCreator   :: Nat
   , chanDestroyer :: Nat
@@ -45,8 +66,10 @@ data ChanKey = ChanKey
 
 convertToCExpr :: Exp a -> CExpr
 convertToCExpr (Exp exp stype) =
-  case exp of
-    Lit x   -> CConst (CIntConst (cInteger (fromIntegral (unsafeCoerce x :: Int))) undefNode)
+  case exp
+    -- Lit x   -> CConst (CIntConst (cInteger (fromIntegral (unsafeCoerce x :: Int))) undefNode)
+        of
+    Lit x   -> stypeToCExpr stype x
     Var num -> CVar (internalIdent $ "v" ++ show num) undefNode
 
 stypeToCExpr :: SingleType a -> a -> CExpr
@@ -124,27 +147,32 @@ varName = cVar . varName_
 declAndRunThread :: Nat -> [CBlockItem]
 declAndRunThread role = [CBlockDecl $ declThread role, liftEToB $ runThread role]
 
-instrToCBlock :: Instr -> CBlockItem
-instrToCBlock (CInitChan chan) = liftEToB $ (chanName chan) <-- chanInit
-instrToCBlock (CDeleteChan chan) = liftEToB $ chanDispose (chanName chan)
-instrToCBlock (CSend chan expr) = liftEToB $ chanSendInt (chanName chan) $ convertToCExpr expr
-instrToCBlock (CRecv chan expr) = liftEToB $ chanRecvInt (chanName chan) $ pre Addr $ convertToCExpr expr
-instrToCBlock (CDecla var stype) = CBlockDecl $ stypeToCDecl stype var
-instrToCBlock (CAssgn x value) = liftEToB $ (varName x) <-- convertToCExpr value
-instrToCBlock (CEnd _ _) = CBlockStmt cvoidReturn
-instrToCBlock (CBranch exp left right) =
-  CBlockStmt $ cifElse (convertToCExpr exp ==: cVar "LEFT") (instrsToS left) (instrsToS right)
-instrToCBlock (CSelect x y z left right) =
-  CBlockStmt $ cifElse ((varName x & "label") ==: cVar "LEFT") undefined undefined
-  where
-    leftPart = block $ (liftEToB $ (varName y) <-- varName x & "label" & "left") : (fmap instrToCBlock (toList left))
-    rightPart = block $ (liftEToB $ (varName z) <-- varName x & "label" & "right") : (fmap instrToCBlock (toList right))
-instrToCBlock (CEither2Label x y) = liftEToB $ (varName y) <-- (varName x & "label")
+typeToTypeSpec :: TypeRep -> CTypeSpec
+typeToTypeSpec x
+  | x == (typeRep $ Proxy @Int) = CIntType undefNode
+  | x == (typeRep $ Proxy @Float) = CFloatType undefNode
+  | x == (typeRep $ Proxy @()) = CIntType undefNode
 
 stypeToCDecl :: SingleType a -> Int -> CDecl
 stypeToCDecl (NumSingleType (IntegralNumType (TypeInt _))) x = decl intTy (cDeclr (varName_ x)) Nothing
 stypeToCDecl (NumSingleType (FloatingNumType (TypeFloat _))) x = decl floatTy (cDeclr (varName_ x)) Nothing
 stypeToCDecl LabelSingleType x = decl labelTy (cDeclr (varName_ x)) Nothing
+stypeToCDecl UnitSingleType x = decl intTy (cDeclr (varName_ x)) Nothing
+stypeToCDecl (UnionSingleType a b) x = decl (eitherTy a b) (cDeclr (varName_ x)) Nothing
+
+eitherTy_ :: (Typeable a, Typeable b) => SingleType a -> SingleType b -> String
+eitherTy_ (_ :: SingleType a) (_ :: SingleType b) = eitherName (typeOf (undefined :: a)) (typeOf (undefined :: b))
+
+eitherName :: TypeRep -> TypeRep -> String
+eitherName x y = intercalate "_" ["Either", showType x, showType y]
+
+showType :: TypeRep -> String
+showType x
+  | x == (typeRep $ Proxy @()) = "unit"
+  | otherwise = show x
+
+eitherTy :: (Typeable a, Typeable b) => SingleType a -> SingleType b -> CDeclSpec
+eitherTy a b = defTy $ eitherTy_ a b
 
 labelTy :: CDeclSpec
 labelTy = defTy "Label"
@@ -161,6 +189,21 @@ procName name = "proc" ++ (show $ fromEnum name)
 instrToFunc :: Nat -> Seq Instr -> CFunDef
 instrToFunc role instrs = fun [voidTy] (procName role) [] (instrsToS instrs)
 
+labelEnum :: CExtDecl
+labelEnum = CDeclExt $ cenum "Label" ["LEFT", "RIGHT"]
+
+labelField :: CDecl
+labelField = CDecl [defTy "Label"] [(Just $ fromString "label", Nothing, Nothing)] undefNode
+
+eitherTypeDecl :: [(TypeRep, TypeRep)] -> [CExtDecl]
+eitherTypeDecl = fmap (CDeclExt . uncurry taggedUnionStruct)
+
+anoyValueUnion :: TypeRep -> TypeRep -> CDecl
+anoyValueUnion left right = anoyUnion "value" [("left", typeToTypeSpec left), ("right", typeToTypeSpec right)]
+
+taggedUnionStruct :: TypeRep -> TypeRep -> CDecl
+taggedUnionStruct a b = csu2 CStructTag (eitherName a b) [labelField, anoyValueUnion a b]
+
 mainFuncStat :: CID -> [Nat] -> CStat
 mainFuncStat cid roles =
   CCompound
@@ -171,11 +214,3 @@ mainFuncStat cid roles =
 
 mainFunc :: CID -> [Nat] -> CFunDef
 mainFunc cid roles = fun [intTy] "main" [] (mainFuncStat cid roles)
-
-codeGenCombined :: [(Nat, Seq Instr)] -> CID -> CTranslUnit
-codeGenCombined instrs cid = CTranslUnit (channelDecls ++ main ++ funcs) undefNode
-  where
-    roles = fmap fst instrs
-    channelDecls = chanDecls cid
-    main = [CFDefExt $ mainFunc cid roles]
-    funcs = fmap (CFDefExt . uncurry instrToFunc) instrs

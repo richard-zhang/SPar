@@ -126,6 +126,48 @@ memberDesig str = CMemberDesig (internalIdent str) undefNode
 empCompoundLit :: CInitList -> CExpr
 empCompoundLit xs = CCompoundLit (CDecl [] [] undefNode) xs undefNode
 
+csu :: CStructTag -> String -> [(String, CTypeSpec)] -> CDecl
+csu tag ident fields = CDecl
+                       [CStorageSpec $ CTypedef undefNode, CTypeSpec $ CSUType structTy undefNode]
+                       [(Just $ fromString ident, Nothing, Nothing)]
+                       undefNode
+  where structTy  = CStruct tag (Just $ fromString ident) (Just $ map structify fields) [] undefNode
+        structify (name, ty) = CDecl [CTypeSpec ty] [(Just (fromString name), Nothing, Nothing)] undefNode
+
+csu1 :: CStructTag -> String -> [(String, CTypeSpec)] -> CDecl
+csu1 tag ident fields = CDecl
+                       [CTypeSpec $ CSUType structTy undefNode]
+                       [(Just $ fromString ident, Nothing, Nothing)]
+                       undefNode
+  where structTy  = CStruct tag Nothing (Just $ map structify fields) [] undefNode
+        structify (name, ty) = CDecl [CTypeSpec ty] [(Just (fromString name), Nothing, Nothing)] undefNode
+
+csu2 :: CStructTag -> String -> [CDecl] -> CDecl
+csu2 tag ident fields = CDecl
+                       [CStorageSpec $ CTypedef undefNode, CTypeSpec $ CSUType structTy undefNode]
+                       [(Just $ fromString ident, Nothing, Nothing)]
+                       undefNode
+  where structTy  = CStruct tag (Just $ fromString ident) (Just $ fields) [] undefNode
+
+cenum :: String -> [String] -> CDecl
+cenum ident fields = CDecl
+                     [CStorageSpec $ CTypedef undefNode, CTypeSpec $ CEnumType enumTy undefNode]
+                     [(Just $ fromString ident, Nothing, Nothing)]
+                     undefNode
+  where enumTy = CEnum (Just $ fromString ident) (Just $ map (\x -> (internalIdent x, Nothing)) fields) [] undefNode
+
+-- | Create a structure, for example @struct "foo" [("bar", intTy)]@ is
+-- @typedef struct foo {int bar;} foo;@
+struct ::  String -> [(String, CTypeSpec)] -> CDecl
+struct = csu CStructTag
+
+-- | Equivalent to 'struct' but generates a C union instead.
+union :: String -> [(String, CTypeSpec)] -> CDecl
+union  = csu CUnionTag
+
+anoyUnion :: String -> [(String, CTypeSpec)] -> CDecl
+anoyUnion  = csu1 CUnionTag
+
 instance IsString Ident where
     fromString = internalIdent
 instance IsString CExpr where

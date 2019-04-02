@@ -175,9 +175,19 @@ cgt0 = do
     x :: Core Int <- recv' one
     return x
 
+cgt0' = do
+    send' zero (Lit 10 :: Core Int)
+    x :: Core Int <- recv' zero
+    return x
+
 cgt1 = do
     x :: Core Int <- recv' zero
     send' zero (Lit 20 :: Core Int)
+    return x
+
+cgt1' = do
+    x :: Core Int <- recv' one
+    send' one (Lit 20 :: Core Int)
     return x
 
 bad = do
@@ -189,3 +199,9 @@ good = rec' 0 $ do
     mu' 0
 
 cgts = [(cgt0, zero), (cgt1, one)]
+
+cgb = branch' one cgt0 cgt1' 
+
+cgs = select' zero (Lit (Left () :: Either () ())) (\_ -> cgt1) (\_ -> cgt0')
+
+cgts2 = [(cgb, zero), (cgs, one)]

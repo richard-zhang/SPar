@@ -1,3 +1,5 @@
 .stack-work/
 spar.cabal
 *~
+.idea/
+*.iml
