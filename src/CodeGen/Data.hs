@@ -84,8 +84,13 @@ stypeToCExpr (UnionSingleType a b) v =
     Right v2 -> helper "right" $ stypeToCExpr b v2
   where
     helper str expr =
-      empCompoundLit [([], initExp $ cVar $ fmap toUpper str), ([], initList [([memberDesig str], initExp expr)])]
+      -- empCompoundLit [([], initExp $ cVar $ fmap toUpper str), ([], initList [([memberDesig str], initExp expr)])]
+      defCompoundLit defName [([], initExp $ cVar $ fmap toUpper str), ([], initList [([memberDesig str], initExp expr)])]
+    defName = eitherName (stypeToTypeRep a) (stypeToTypeRep b)
 stypeToCExpr UnitSingleType _ = CConst (CIntConst (cInteger 0) undefNode)
+
+stypeToTypeRep :: Typeable a => SingleType a -> TypeRep
+stypeToTypeRep (x :: SingleType a) = typeOf (undefined :: a)
 
 numTypeToCExpr :: NumType a -> a -> CExpr
 numTypeToCExpr (IntegralNumType (TypeInt _)) x = CConst (CIntConst (cInteger (fromIntegral x)) undefNode)
@@ -98,7 +103,7 @@ pthreadCreate :: CExpr -> CExpr -> CExpr
 pthreadCreate a b = (cVar "pthread_create") # [a, cVar "NULL", b, cVar "NULL"]
 
 pthreadJoin :: CExpr -> CExpr
-pthreadJoin a = (cVar "pthread_join") # [a, cVar "NULL"];
+pthreadJoin a = (cVar "pthread_join") # [a, cVar "NULL"]
 
 threadName :: Nat -> String
 threadName role = "th" ++ (show $ fromEnum role)
@@ -199,7 +204,12 @@ instrToFuncRt :: Nat -> Seq Instr -> CFunDef
 instrToFuncRt role instrs = fun [voidTy] (procName role ++ "Rt") [] (instrsToS instrs)
 
 pthreadFunc :: Nat -> CFunDef
-pthreadFunc role = funP [voidTy] (procName role) [] (block [liftEToB $ cVar (procName role ++ "Rt") # [], CBlockStmt $ creturn $ cVar "NULL"])
+pthreadFunc role =
+  funP
+    [voidTy]
+    (procName role)
+    []
+    (block [liftEToB $ cVar (procName role ++ "Rt") # [], CBlockStmt $ creturn $ cVar "NULL"])
 
 labelEnum :: CExtDecl
 labelEnum = CDeclExt $ cenum "Label" ["LEFT", "RIGHT"]
@@ -221,10 +231,7 @@ mainFuncStat cid roles =
   CCompound
     []
     (fmap (\chan -> liftEToB $ (cVar $ chanName__ chan) <-- chanInit) [1 .. cid - 1] ++
-     (roles >>= declAndRunThread) ++ 
-     (fmap (liftEToB . joinThread) roles) ++ 
-     [CBlockStmt $ creturn $ cInt 0]
-    )
+     (roles >>= declAndRunThread) ++ (fmap (liftEToB . joinThread) roles) ++ [CBlockStmt $ creturn $ cInt 0])
     undefNode
 
 mainFunc :: CID -> [Nat] -> CFunDef

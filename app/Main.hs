@@ -2,4 +2,4 @@ module Main where
 import Lib
 
 main :: IO ()
-main = codeGenDebug cgts1
+main = codeGenDebug cgts2

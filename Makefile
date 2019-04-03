@@ -13,7 +13,8 @@ run: build
 	./$(SRC)/$(FNAME).o
 
 clean:
-	rm -rf $(SRC)/*
+	rm -rf $(SRC)/*.o
+	rm -rf $(SRC)/$(FNAME).c
 
 sr:
 	stack run

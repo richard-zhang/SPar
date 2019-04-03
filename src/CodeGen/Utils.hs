@@ -137,6 +137,9 @@ memberDesig str = CMemberDesig (internalIdent str) undefNode
 empCompoundLit :: CInitList -> CExpr
 empCompoundLit xs = CCompoundLit (CDecl [] [] undefNode) xs undefNode
 
+defCompoundLit :: String -> CInitList -> CExpr
+defCompoundLit str xs = CCompoundLit (CDecl [defTy str] [] undefNode) xs undefNode
+
 csu :: CStructTag -> String -> [(String, CTypeSpec)] -> CDecl
 csu tag ident fields = CDecl
                        [CStorageSpec $ CTypedef undefNode, CTypeSpec $ CSUType structTy undefNode]
