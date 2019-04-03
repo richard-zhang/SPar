@@ -36,14 +36,15 @@ evalCodeGen ma = codeGenCombined instrs st
         Identity (instrs, st) = runStateT (runCodeGen ma) initCodeGenState
 
 codeGenCombined :: [(Nat, Seq Instr)] -> CodeGenState -> CTranslUnit
-codeGenCombined instrs state = CTranslUnit ([labelEnum] ++ eitherTypeDecls ++ channelDecls ++ main ++ funcs) undefNode
+codeGenCombined instrs state = CTranslUnit ([labelEnum] ++ eitherTypeDecls ++ channelDecls ++ funcsRt ++ funcsCaller ++ main) undefNode
   where
     cid = chanNext state
     channelDecls = chanDecls cid
     roles = fmap fst instrs
     eitherTypeDecls = eitherTypeDecl $ Set.toList $ eitherTypeCollects state
     main = [CFDefExt $ mainFunc cid roles]
-    funcs = fmap (CFDefExt . uncurry instrToFunc) instrs
+    funcsRt = fmap (CFDefExt . uncurry instrToFuncRt) instrs
+    funcsCaller = fmap (CFDefExt . pthreadFunc . fst) instrs
 
 initCodeGenState :: CodeGenState
 initCodeGenState = CodeGenState { chanTable = Map.empty, flagTable = Map.empty, varNext = 0, chanNext = 1 , eitherTypeCollects = Set.empty}

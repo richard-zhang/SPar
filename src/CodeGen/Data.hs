@@ -97,6 +97,9 @@ pthreadCreate_ a b c d = (cVar "pthread_create") # [a, b, c, d]
 pthreadCreate :: CExpr -> CExpr -> CExpr
 pthreadCreate a b = (cVar "pthread_create") # [a, cVar "NULL", b, cVar "NULL"]
 
+pthreadJoin :: CExpr -> CExpr
+pthreadJoin a = (cVar "pthread_join") # [a, cVar "NULL"];
+
 threadName :: Nat -> String
 threadName role = "th" ++ (show $ fromEnum role)
 
@@ -105,6 +108,9 @@ declThread role = decl (CTypeSpec pthreadSpec) (cDeclr $ threadName role) Nothin
 
 runThread :: Nat -> CExpr
 runThread role = pthreadCreate (pre Addr $ cVar $ threadName role) (cVar $ procName role)
+
+joinThread :: Nat -> CExpr
+joinThread role = pthreadJoin $ cVar $ threadName role
 
 chanInit :: CExpr
 chanInit = (cVar "chan_init") # [cInt 1]
@@ -189,6 +195,12 @@ procName name = "proc" ++ (show $ fromEnum name)
 instrToFunc :: Nat -> Seq Instr -> CFunDef
 instrToFunc role instrs = fun [voidTy] (procName role) [] (instrsToS instrs)
 
+instrToFuncRt :: Nat -> Seq Instr -> CFunDef
+instrToFuncRt role instrs = fun [voidTy] (procName role ++ "Rt") [] (instrsToS instrs)
+
+pthreadFunc :: Nat -> CFunDef
+pthreadFunc role = funP [voidTy] (procName role) [] (block [liftEToB $ cVar (procName role ++ "Rt") # [], CBlockStmt $ creturn $ cVar "NULL"])
+
 labelEnum :: CExtDecl
 labelEnum = CDeclExt $ cenum "Label" ["LEFT", "RIGHT"]
 
@@ -209,7 +221,10 @@ mainFuncStat cid roles =
   CCompound
     []
     (fmap (\chan -> liftEToB $ (cVar $ chanName__ chan) <-- chanInit) [1 .. cid - 1] ++
-     (roles >>= declAndRunThread) ++ [CBlockStmt $ creturn $ cInt 0])
+     (roles >>= declAndRunThread) ++ 
+     (fmap (liftEToB . joinThread) roles) ++ 
+     [CBlockStmt $ creturn $ cInt 0]
+    )
     undefNode
 
 mainFunc :: CID -> [Nat] -> CFunDef

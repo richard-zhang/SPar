@@ -198,7 +198,7 @@ good = rec' 0 $ do
     x :: Core Int <- recv' zero
     mu' 0
 
-cgts = [(cgt0, zero), (cgt1, one)]
+cgts1 = [(cgt0, zero), (cgt1, one)]
 
 cgb = branch' one cgt0 cgt1' 
 

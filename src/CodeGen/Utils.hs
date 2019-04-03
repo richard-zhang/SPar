@@ -114,6 +114,17 @@ annotatedFun specs name args annots body = CFunDef specs decl [] body undefNode
         attrs :: [CAttr]
         attrs = map (\ s -> CAttr (fromString s) [] undefNode) annots
 
+funP :: [CDeclSpec] -> String -> [Maybe CExpr -> CDecl] -> CStat -> CFunDef
+funP specs name args body = annotatedFunP specs name args [] body
+
+annotatedFunP :: [CDeclSpec] -> String -> [Maybe CExpr -> CDecl] -> [String] -> CStat -> CFunDef
+annotatedFunP specs name args annots body = CFunDef specs decl [] body undefNode
+  where decl = CDeclr (Just $ fromString name)
+                [CFunDeclr (Right (fmap ($Nothing) args, False)) [] undefNode, CPtrDeclr [] undefNode]
+                Nothing attrs undefNode
+        attrs :: [CAttr]
+        attrs = map (\ s -> CAttr (fromString s) [] undefNode) annots
+
 initExp :: CExpr -> CInit
 initExp exp = CInitExpr exp undefNode
 

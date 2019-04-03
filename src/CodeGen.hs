@@ -1,18 +1,26 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE PatternSynonyms #-}
 module CodeGen where
 import Control.Monad.Free
 import Control.Monad.Identity
 import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
 import Data.Type.Natural
-import Language.C.Syntax.AST
+import Language.C
+import Language.C.Pretty
 
 import CodeGen.Data
 import CodeGen.Monad
 import CodeGen.Type
 import Language.Poly.Core
 import RtDef
+
+codeGenDebug :: Repr a => [ProcessRT a] -> IO ()  
+codeGenDebug xs = do
+    let source = (show . pretty . testCodeGen) xs
+    let headers = concatMap (\x -> "#include<" ++ x ++ ".h>\n") ["stdint", "stdio", "chan", "pthread"]
+    writeFile "codegen/code.c" (headers ++ source ++ "\n")
 
 testCodeGen :: Repr a => [ProcessRT a] -> CTranslUnit
 testCodeGen xs = evalCodeGen $ traverseToCodeGen singleType xs
@@ -55,8 +63,8 @@ helper_ stype (Free (Branch' sender left right next)) role = do
     let chan = Channel cid singleTypeLabel
     varName <- freshVarName
     let var = Var $ fromIntegral varName :: Core Label
-    leftSeqs <- helper_ singleType left role
-    rightSeqs <- helper_ singleType right role
+    leftSeqs <- removeLastSeqSafe <$> helper_ singleType left role
+    rightSeqs <- removeLastSeqSafe <$> helper_ singleType right role
     let instrs = Seq.fromList [CDecla varName singleTypeLabel, 
                                CRecv chan (Exp var singleTypeLabel),
                                CDeleteChan chan,
@@ -75,8 +83,8 @@ helper_ stype (Free (Select' receiver (exp :: Core (Either a b)) left right next
     varRightVarName <- freshVarName
     let varLeft = Var $ fromIntegral varLeftVarName :: Core a
     let varRight = Var $ fromIntegral varRightVarName :: Core b
-    leftSeqs <- helper_ singleType (left varLeft) role
-    rightSeqs <- helper_ singleType (right varRight) role
+    leftSeqs <- removeLastSeqSafe <$> helper_ singleType (left varLeft) role
+    rightSeqs <- removeLastSeqSafe <$> helper_ singleType (right varRight) role
     updateEitherTypeCollects (singleType :: SingleType (Either a b))
     let instrs = Seq.fromList [CDecla varEitherName (singleType :: SingleType (Either a b)),
                                CAssgn varEitherName $ Exp exp singleType,
@@ -89,3 +97,8 @@ helper_ stype (Free (Select' receiver (exp :: Core (Either a b)) left right next
                               ]
     restOfInstrs <- helper_ stype next role
     return (instrs Seq.>< restOfInstrs)
+
+removeLastSeqSafe :: Seq a -> Seq a
+removeLastSeqSafe x = case x of 
+    Seq.Empty -> x
+    xs Seq.:|> _ -> xs
