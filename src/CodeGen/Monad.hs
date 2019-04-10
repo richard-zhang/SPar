@@ -1,9 +1,11 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE RecordWildCards            #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE RankNTypes        #-}
 module CodeGen.Monad where
 import Control.Monad.Identity
 import Control.Monad.State
+import Control.Monad.IO.Class
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -14,6 +16,7 @@ import qualified Data.Sequence as Seq
 import Data.Type.Natural
 import Data.Typeable
 import Language.C hiding (setFlag)
+import System.IO.Unsafe
 
 import CodeGen.Data
 import CodeGen.Type
@@ -24,16 +27,21 @@ data CodeGenState = CodeGenState
     flagTable :: Map ChanKey Nat, -- flag to indiciate which process is encountered first in the code generation
     varNext   :: Int,
     chanNext  :: CID,
-    eitherTypeCollects :: Set (TypeRep, TypeRep)
+    eitherTypeCollects :: Set (TypeRep, TypeRep),
+    newChanTable :: Map ChanKey CID 
   }
 
 newtype CodeGen m a = CodeGen { runCodeGen :: StateT CodeGenState m a }
-    deriving (Functor, Applicative, Monad, MonadState CodeGenState)
+    deriving (Functor, Applicative, Monad, MonadState CodeGenState, MonadIO)
 
-evalCodeGen :: CodeGen Identity [(Nat, (Seq Instr))] -> CTranslUnit
-evalCodeGen ma = codeGenCombined instrs st
+-- evalCodeGen :: CodeGen Identity [(Nat, (Seq Instr))] -> CTranslUnit
+-- evalCodeGen = evalCodeGenHelper runIdentity
+evalCodeGen = evalCodeGenHelper unsafePerformIO
+
+evalCodeGenHelper :: (forall a. m a -> a) -> CodeGen m [(Nat, (Seq Instr))] -> CTranslUnit
+evalCodeGenHelper f ma = codeGenCombined instrs st
     where 
-        Identity (instrs, st) = runStateT (runCodeGen ma) initCodeGenState
+        (instrs, st) = f $ runStateT (runCodeGen ma) initCodeGenState
 
 codeGenCombined :: [(Nat, Seq Instr)] -> CodeGenState -> CTranslUnit
 codeGenCombined instrs state = CTranslUnit ([labelEnum] ++ eitherTypeDecls ++ channelDecls ++ funcsRt ++ funcsCaller ++ main) undefNode
@@ -47,7 +55,7 @@ codeGenCombined instrs state = CTranslUnit ([labelEnum] ++ eitherTypeDecls ++ ch
     funcsCaller = fmap (CFDefExt . pthreadFunc . fst) instrs
 
 initCodeGenState :: CodeGenState
-initCodeGenState = CodeGenState { chanTable = Map.empty, flagTable = Map.empty, varNext = 0, chanNext = 1 , eitherTypeCollects = Set.empty}
+initCodeGenState = CodeGenState { chanTable = Map.empty, flagTable = Map.empty, varNext = 0, chanNext = 1 , eitherTypeCollects = Set.empty, newChanTable = Map.empty}
 
 freshChanName :: Monad m => CodeGen m CID
 freshChanName = state $ \s@CodeGenState{..} -> (chanNext, s { chanNext = chanNext + 1})
@@ -61,10 +69,17 @@ addChanNameToChanTable key value = state $ \s@CodeGenState{..} -> (value, s { ch
 createAndAddChannel :: Monad m => ChanKey -> CodeGen m CID
 createAndAddChannel key = freshChanName >>= addChanNameToChanTable key
 
+createAndAddChannel2 :: Monad m => ChanKey -> CodeGen m CID
+createAndAddChannel2 key = freshChanName >>= helper key
+    where
+        helper :: Monad m => ChanKey -> CID -> CodeGen m CID
+        helper key value = state $ \s@CodeGenState{..} -> (value, s { newChanTable = Map.insert key value newChanTable })
+
 getAndDropChannel :: Monad m => ChanKey -> CodeGen m CID
 getAndDropChannel key = do
     codeGenState <- get
     let table = chanTable codeGenState
+    -- TODO use pattern matching to get the first element
     let cid = Seq.index (fromJust $ Map.lookup key table) 0
     put (codeGenState { chanTable = Map.update (Just . Seq.drop 1) key table })
     return cid
@@ -94,8 +109,26 @@ getChannelAndUpdateChanTable key role = do
     cid <- if flag == role then createAndAddChannel key else getAndDropChannel key
     return cid
 
+getChannelAndUpdateChanTable2 :: Monad m => ChanKey -> Nat -> CodeGen m CID
+getChannelAndUpdateChanTable2 key _ = do
+    codeGenState <- get
+    let map = newChanTable codeGenState
+    let result = Map.lookup key map 
+    case result of
+        Just cid -> return cid
+        Nothing  -> createAndAddChannel2 key
+
 updateEitherTypeCollects :: (Typeable a, Typeable b, Monad m) => SingleType (Either a b) -> CodeGen m ()
 updateEitherTypeCollects (x :: SingleType (Either a b)) =
     state $ \s@CodeGenState{..} -> ((), s { eitherTypeCollects = Set.insert elem eitherTypeCollects }) 
     where
         elem = (typeOf (undefined :: a), typeOf (undefined :: b))
+
+-- debugging purpose
+getSeqChan :: Monad m => ChanKey -> CodeGen m (Seq CID)
+getSeqChan key= do
+    codeGenState <- get
+    let maybeSeq = Map.lookup key $ chanTable codeGenState
+    return $ case maybeSeq of
+        Just seq -> seq
+        Nothing -> Seq.empty

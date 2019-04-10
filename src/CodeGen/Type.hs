@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
 module CodeGen.Type where
 
 import Data.Bits
@@ -61,6 +62,12 @@ singleTypeLabel = LabelSingleType
 
 singleTypeUnionInt :: SingleType (Either Int Int)
 singleTypeUnionInt = UnionSingleType singleTypeInt singleTypeInt
+
+-- stypeToTypeRep :: SingleType a -> TypeRep
+-- stypeToTypeRep LabelSingleType = typeOf (undefined :: Label)
+-- stypeToTypeRep UnitSingleType = typeOf (undefined :: ())
+-- stypeToTypeRep (UnionSingleType (_ :: SingleType a) (_ :: SingleType b)) = typeOf (undefined :: (Either a b))
+-- stypeToTypeRep (NumSingleType (_ :: NumType a)) = typeOf (undefined :: a)
 
 class Typeable a => Repr a where
     singleType :: SingleType a

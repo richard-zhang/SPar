@@ -39,6 +39,8 @@ instance Functor (STypeF a) where
 instance Eq a => Eq1 (STypeF a) where
     liftEq eq (S r v n) (S r' v' n')        = r == r' && v == v' && eq n n'
     liftEq eq (R r v n) (R r' v' n')        = r == r' && v == v' && eq n n'
+    liftEq eq (S _ _ _) (R _ _ _)        = error "send recv doesn't match"
+    liftEq eq (R _ _ _) (S _ _ _)        = error "recv send doesn't match"
     -- TODO potential issue => don't care the result type of SType since it's not part of the protocols
     liftEq eq (B r a b n) (B r' a' b' n')   = r == r' && liftEq (\_ _ -> True) a a' && eq n n'
     liftEq eq (Se r a b n) (Se r' a' b' n') = r == r' && liftEq (\_ _ -> True) a a' && eq n n'

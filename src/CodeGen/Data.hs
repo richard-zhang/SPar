@@ -41,6 +41,7 @@ data Instr where
     -- the first int represents the variable of either type
     -- the second int represents the value of the label
   CEither2Label :: Int -> Int -> Instr
+  CRec :: Nat -> Instr
 
 instrToCBlock :: Instr -> CBlockItem
 instrToCBlock (CInitChan chan) = liftEToB $ (chanName chan) <-- chanInit
@@ -58,6 +59,7 @@ instrToCBlock (CSelect x y z left right) =
     leftPart = block $ (liftEToB $ (varName y) <-- varName x & "value" & "left") : (fmap instrToCBlock (toList left))
     rightPart = block $ (liftEToB $ (varName z) <-- varName x & "value" & "right") : (fmap instrToCBlock (toList right))
 instrToCBlock (CEither2Label x y) = liftEToB $ (varName y) <-- (varName x & "label")
+instrToCBlock (CRec role) = liftEToB $ cVar (procRTName role) # []
 
 data ChanKey = ChanKey
   { chanCreator   :: Nat
@@ -197,11 +199,14 @@ chanDecls cid = fmap (CDeclExt . chanDecl) [1 .. cid - 1]
 procName :: Nat -> String
 procName name = "proc" ++ (show $ fromEnum name)
 
+procRTName :: Nat -> String
+procRTName name = procName name ++ "Rt"
+
 instrToFunc :: Nat -> Seq Instr -> CFunDef
 instrToFunc role instrs = fun [voidTy] (procName role) [] (instrsToS instrs)
 
 instrToFuncRt :: Nat -> Seq Instr -> CFunDef
-instrToFuncRt role instrs = fun [voidTy] (procName role ++ "Rt") [] (instrsToS instrs)
+instrToFuncRt role instrs = fun [voidTy] (procRTName role) [] (instrsToS instrs)
 
 pthreadFunc :: Nat -> CFunDef
 pthreadFunc role =
@@ -231,7 +236,11 @@ mainFuncStat cid roles =
   CCompound
     []
     (fmap (\chan -> liftEToB $ (cVar $ chanName__ chan) <-- chanInit) [1 .. cid - 1] ++
-     (roles >>= declAndRunThread) ++ (fmap (liftEToB . joinThread) roles) ++ [CBlockStmt $ creturn $ cInt 0])
+     (roles >>= declAndRunThread) ++
+     fmap (liftEToB . joinThread) roles ++
+     fmap (\chan -> liftEToB $ chanDispose (cVar $ chanName__ chan)) [1 .. cid - 1] ++
+     [CBlockStmt $ creturn $ cInt 0]
+    )
     undefNode
 
 mainFunc :: CID -> [Nat] -> CFunDef

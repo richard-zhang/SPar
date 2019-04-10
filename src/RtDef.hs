@@ -14,6 +14,7 @@ import Data.Singletons
 import Data.Singletons.Decide
 import Data.Type.Natural hiding (type (*), S)
 import qualified Data.Typeable as T
+
 import Def hiding (return, (>>), (>>=))
 import Language.Poly.Core
 import Type
@@ -30,7 +31,7 @@ data ProcRTF next where
     Branch' :: (Serialise c) => Nat -> ProcRT c -> ProcRT c -> next -> ProcRTF next
 
     Rec' :: Integer -> next -> ProcRTF next
-    Mu' :: Integer -> ProcRTF next
+    Mu' :: Integer -> ProcRTF a
 
 instance Functor ProcRTF where
     fmap f (Send' r v n)               = Send' r v $ f n
@@ -70,6 +71,9 @@ branch' role left right = liftF $ Branch' role left right Unit
 
 convert' :: ProcRT a -> STypeV ()
 convert' = convert 0
+
+ignoreOutput :: ProcRT a -> ProcRT ()
+ignoreOutput = (>> return (Lit ()))
 
 convert :: Integer -> ProcRT a -> STypeV ()
 convert _ (Pure a) = Pure ()
@@ -167,7 +171,6 @@ typeCheck proc providedType = case typeInfer proc of
 typeInfer :: Typeable a => ProcRT a -> SomeSType
 typeInfer proc = withProcRT proc (const . SomeSType)
 
-
 a = SPure (Proxy :: Proxy Int)
 
 cgt0 = do
@@ -194,14 +197,45 @@ bad = do
     x :: Core Int <- recv' zero
     bad
 
+good :: ProcRT ()
 good = rec' 0 $ do
     x :: Core Int <- recv' zero
     mu' 0
 
-cgts1 = [(cgt0, zero), (cgt1, one)]
+good' :: ProcRT ()
+good' = rec' 0 $ do
+    send' one (Lit 20 :: Core Int)
+    mu' 0
+
+recTest = rec' 0 $ branch' zero 
+    (do 
+        send' zero (Lit 1 :: Core Int)
+--        send' zero (Lit 2 :: Core Int)
+--        send' zero (Lit 3 :: Core Int)
+    )
+    (send' zero (Lit 99 :: Core Int) >> mu' 0)
+
+recTest' = select' one (Lit (Right () :: Either () ()))
+    (\_ -> return (Lit ()))
+    (\_ -> do 
+        x :: Core Int <- recv' one
+        select' one (Lit (Left () :: Either () ()))
+            (\_ -> do
+                y :: Core Int <- recv' one     
+--                z :: Core Int <- recv' one
+--                q :: Core Int <- recv' one
+                return (Lit ())
+            )
+            (\_ -> return (Lit ()))
+    )
+
 
 cgb = branch' one cgt0 cgt1' 
 
 cgs = select' zero (Lit (Left () :: Either () ())) (\_ -> cgt1) (\_ -> cgt0')
 
+cgts1 = [(cgt0, zero), (cgt1, one)]
+cgts1' = [(ignoreOutput cgt0, zero), (ignoreOutput cgt1, one)]
 cgts2 = [(cgb, zero), (cgs, one)]
+cgts3 = [(good', zero), (good, one)]
+cgts4 = [(recTest', zero), (recTest, one)]
