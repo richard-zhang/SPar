@@ -124,7 +124,7 @@ evalN2 xs = if dualityC (fmap (\(a, b) -> (convert 0 a, b)) xs)
     then eval' xs
     else error "Not dual"
 
-checkDual :: [ProcessRT ()] -> Bool
+checkDual :: [ProcessRT a] -> Bool
 checkDual = dualityC . fmap (\(a, b) -> (convert 0 a, b))
 
 evalN :: DualityCons xs => PList xs -> IO [ObservableAction]

@@ -17,15 +17,17 @@ import CodeGen.Monad
 import CodeGen.Type
 import Language.Poly.Core
 import RtDef
+import Rt (checkDual)
 
 instance MonadIO Identity where 
     liftIO = Identity . unsafePerformIO
 
 codeGenDebug :: Repr a => [ProcessRT a] -> IO ()  
-codeGenDebug xs = do
+codeGenDebug xs | checkDual xs = do
     let source = (show . pretty . testCodeGen) xs
     let headers = concatMap (\x -> "#include<" ++ x ++ ".h>\n") ["stdint", "stdio", "chan", "pthread"]
     writeFile "codegen/code.c" (headers ++ source ++ "\n")
+codeGenDebug _ | otherwise = error "the list of processes are not dual"
 
 testCodeGen :: Repr a => [ProcessRT a] -> CTranslUnit
 testCodeGen xs = evalCodeGen $ traverseToCodeGen singleType xs
