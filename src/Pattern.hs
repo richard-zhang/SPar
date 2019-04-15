@@ -5,13 +5,17 @@
 {-# LANGUAGE RecordWildCards           #-}
 {-# LANGUAGE ScopedTypeVariables       #-}
 {-# LANGUAGE TypeInType                #-}
+{-# LANGUAGE KindSignatures            #-}
 
 module Pattern where
 
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Maybe
 import Data.Tuple
+import Data.Kind
 import Data.Type.Natural
 import Type.Reflection
 
@@ -51,18 +55,27 @@ data AProcRTFunc a where
     -> (Core a -> ProcRT c)
     -> AProcRTFunc a
 
-data Pipe a b = Pipe
-  { start :: (Nat, TypeRep a)
-  , cont  :: AProcRTFunc a
-  , env   :: Map Nat AProcRT
-  , end   :: (Nat, TypeRep b)
-  }
+data Pipe a (b  :: Type) where 
+  Pipe :: (Serialise a, Serialise b)  => 
+    { start :: (Nat, TypeRep a)
+    , cont  :: AProcRTFunc a
+    , env   :: Map Nat AProcRT
+    , end   :: (Nat, TypeRep b)
+    } -> Pipe a b
+
+getAllRoles :: Pipe a b -> Set Nat
+getAllRoles p@Pipe{..} = Set.insert (startNat p) $ Map.keysSet env
+
+getMaximum :: Pipe a b -> Nat
+getMaximum p@Pipe{..} = case Map.lookupMax env of
+  Just (k, _) -> max k $ startNat p
+  Nothing -> startNat p
 
 callAProcRTFunc :: AProcRTFunc a -> Core a -> AProcRT
 callAProcRTFunc (AProcRTFunc ty cont) val = AProcRT ty (cont val)
 
 getAProcRTofEnd :: Pipe a b -> AProcRT
-getAProcRTofEnd Pipe {..} = fromMaybe (error "no procRT for end") (Map.lookup (fst end) env)
+getAProcRTofEnd Pipe {..} = fromMaybe (error "no proc for end") (Map.lookup (fst end) env)
 
 addRecv :: AProcRTFunc a -> Nat -> AProcRT
 addRecv ((AProcRTFunc ty cont) :: AProcRTFunc a) sender = AProcRT ty wholeProc
@@ -76,14 +89,44 @@ addSend (AProcRT (ty :: TypeRep a) proc) receiver = AProcRT ty (proc >>= cont)
   where
     cont = send' receiver :: Core a -> ProcRT a
 
+getRecvProc :: Nat -> Pipe a b -> AProcRT
+getRecvProc sender p@Pipe{..} = procRecv
+  where
+    receiver = fst start
+    procRecv = addRecv combinedProcFunc sender
+    combinedProcFunc = case Map.lookup receiver env of
+      Just proc -> cont `bind2` proc
+      Nothing   -> cont
+
+updateEnvWithRecvProc :: Nat -> Pipe a b -> Map Nat AProcRT
+updateEnvWithRecvProc sender pipe@Pipe{..} = Map.insert (fst start) (getRecvProc sender pipe) env
+
+getProcFromEnv :: Nat -> Map Nat AProcRT -> AProcRT
+getProcFromEnv key env = fromMaybe (error "proc doesn't exist in env") (Map.lookup key env)
+
+startNat :: Pipe a b -> Nat
+startNat Pipe{..} = fst start
+
+endNat :: Pipe a b -> Nat
+endNat Pipe{..} = fst end
+
+getSendProc :: Nat -> Nat -> Map Nat AProcRT -> AProcRT    
+getSendProc receiver sender env = addSend (getProcFromEnv sender env) receiver
+
+updateEnvWithSendProc :: Nat -> Nat -> Map Nat AProcRT -> Map Nat AProcRT
+updateEnvWithSendProc receiver sender env = Map.insert sender (getSendProc receiver sender env) env
+
+addBranch :: Nat -> AProcRT -> AProcRT -> AProcRT
+addBranch sender leftP@(AProcRT (tyl :: TypeRep a) procl) rightP@(AProcRT (tyr :: TypeRep b) procr) =
+  case tyl `eqTypeRep` tyr of
+    Just HRefl -> toAProc $ branch' sender procl procr
+    Nothing -> toAProc $ branch' sender (ignoreOutput procl) (ignoreOutput procr)
+
 compose :: Pipe a b -> Pipe b c -> Pipe a c
-compose first second = Pipe {start = start first, cont = cont first, env = newEnv, end = end second}
+compose first@Pipe{} second@Pipe{} = Pipe {start = start first, cont = cont first, env = newEnv, end = end second}
   where
     procSend = addSend (getAProcRTofEnd first) receiver
-    procRecv = addRecv combinedProcFunc sender
-    combinedProcFunc = case Map.lookup receiver (env second) of
-      Just proc -> cont second `bind2` proc
-      Nothing   -> cont second
+    procRecv = getRecvProc sender second
     sender = fst $ end first
     receiver = fst $ start second
     newEnv = Map.insert receiver procRecv $ Map.insert sender procSend $ Map.union (env first) (env second)
@@ -112,6 +155,66 @@ toAProcRTFunc (f :: Core a -> ProcRT b) = AProcRTFunc (typeRep :: TypeRep b) f
 
 helloWorld3 = runPipe (compose (helloWorld2' 0 1) (helloWorld2' 10 1)) (Lit 10 :: Core Int)
 -- helloWorld3 = runPipe (helloWorld2' 10 1) (Lit 10 :: Core Int)
+
+liftCoreF :: (Serialise a, Serialise b) => (Core a -> Core b) -> Nat -> Nat -> Pipe a b
+liftCoreF f sender receiver 
+  | sender /= receiver = Pipe {
+      start = (sender, typeRep),
+      cont = procSend,
+      env = Map.singleton receiver procRecv,
+      end = (receiver, typeRep)
+    }
+  | otherwise = Pipe {
+      start = (sender, typeRep),
+      cont = toAProcRTFunc (return . f),
+      env = Map.empty,
+      end = (receiver, typeRep)
+    }
+    where
+      procRecv = toAProc (recv' sender >>= return . f)
+      procSend = toAProcRTFunc (\x -> send' receiver x)
+
+generalSelect' :: Pipe a c -> Pipe b d -> Nat -> Nat -> Pipe (Either a b) (Either c d)
+generalSelect' = undefined
+
+generalSelect :: (Nat -> Nat -> Pipe a c) -> (Nat -> Nat -> Pipe b d) -> Nat -> Nat -> Pipe (Either a b) (Either c d)
+generalSelect leftArrow rightArrow sender receiver = generalSelect' leftP rightP sender receiver
+  where
+    leftP = leftArrow (S sender) (S sender)
+    rightP = rightArrow (S $ getMaximum leftP) (S $ getMaximum rightP)
+
+selector :: (Nat -> Nat -> Pipe a c) -> (Nat -> Nat -> Pipe b c) -> Nat -> Nat -> Pipe (Either a b) c
+selector leftArrow rightArrow sender receiver = selector' leftP rightP sender receiver
+  where
+    leftP = leftArrow (S sender) (S sender)
+    rightP = rightArrow (S $ getMaximum leftP) (S $ getMaximum rightP)
+
+selector' :: Pipe a c -> Pipe b c -> Nat -> Nat -> Pipe (Either a b) c
+selector' (leftP@Pipe{} :: Pipe a c) (rightP@Pipe{} :: Pipe b c) sender receiver =
+  Pipe {
+    start = (sender, typeRep),
+    cont = procSend,
+    env = newEnv,
+    end = (receiver, snd $ end leftP)
+  }
+  where
+    leftRecv = startNat leftP
+    rightRecv = startNat rightP
+
+    allRole = receiver : (Set.toList $ Set.union (getAllRoles leftP) (getAllRoles rightP))
+    procSend = toAProcRTFunc (\x -> selectMulti' allRole (x :: Core (Either a b)) (\x -> ignoreOutput $ send' leftRecv x) (\x -> ignoreOutput $ send' rightRecv x))
+
+    leftEnv = updateEnvWithSendProc receiver (endNat leftP) $ updateEnvWithRecvProc sender leftP
+    rightEnv = updateEnvWithSendProc receiver (endNat rightP) $ updateEnvWithRecvProc sender rightP
+    
+    branchProc = toAProc $ branchCont' sender ((recv' (endNat leftP)) :: ProcRT c) ((recv' (endNat rightP)) :: ProcRT c)
+
+    dupEnv = Map.intersectionWith (addBranch sender) leftEnv rightEnv
+    newLeftEnv = Map.map (\x -> addBranch sender x (toAProc $ return $ Lit ())) $ Map.difference leftEnv rightEnv
+    newRightEnv = Map.map (\x -> addBranch sender (toAProc $ return $ Lit ()) x) $ Map.difference rightEnv leftEnv
+
+    -- the receiver might already be in the env so use insertWith
+    newEnv = Map.insertWith (flip bind) receiver branchProc $ Map.union dupEnv $ Map.union newLeftEnv newRightEnv
 
 helloWorld2' :: Int -> Int -> Pipe Int Int
 helloWorld2' x y = forkJoinDc2 x y div comb basic pre post

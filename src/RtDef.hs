@@ -30,6 +30,9 @@ data ProcRTF next where
     Select' :: (Serialise a, Serialise b, Serialise c) => Nat -> Core (Either a b) -> (Core a -> ProcRT c) -> (Core b -> ProcRT c) -> next -> ProcRTF next
     Branch' :: (Serialise c) => Nat -> ProcRT c -> ProcRT c -> next -> ProcRTF next
 
+    SelectMult' :: (Serialise a, Serialise b, Serialise c) => [Nat] -> Core (Either a b) -> (Core a -> ProcRT c) -> (Core b -> ProcRT c) -> next -> ProcRTF next
+    BranchCont' :: (Serialise c) => Nat -> ProcRT c -> ProcRT c -> (Core c -> next) -> ProcRTF next 
+
     Rec' :: Integer -> next -> ProcRTF next
     Mu' :: Integer -> ProcRTF a
 
@@ -39,10 +42,15 @@ instance Functor ProcRTF where
     fmap f (Select' r v cont1 cont2 n) = Select' r v cont1 cont2 (f n)
     fmap f (Branch' r left right n)    = Branch' r left right (f n)
 
+    fmap f (SelectMult' rs v cont1 cont2 n) = SelectMult' rs v cont1 cont2 (f n)
+    fmap f (BranchCont' r left right cont) = BranchCont' r left right (f . cont)
+
     fmap f (Rec' var n)                = Rec' var (f n)
     fmap f (Mu' var)                   = Mu' var
 
-type ProcRT a = Free ProcRTF (Core a)
+-- type ProcRT a = Free ProcRTF (Core a)
+type ProcRT a = ProcRT' (Core a)
+type ProcRT' a = Free ProcRTF a
 
 send' :: Serialise a => Nat -> Core a -> ProcRT a
 send' role value = liftF $ Send' role value value
@@ -65,9 +73,20 @@ select'
     -> ProcRT ()
 select' role var cont1 cont2 = liftF $ Select' role var cont1 cont2 Unit
 
-
 branch' :: Serialise c => Nat -> ProcRT c -> ProcRT c -> ProcRT ()
 branch' role left right = liftF $ Branch' role left right Unit
+
+selectMulti' 
+    :: (Serialise a, Serialise b, Serialise c)
+    => [Nat]
+    -> Core (Either a b)
+    -> (Core a -> ProcRT c)
+    -> (Core b -> ProcRT c)
+    -> ProcRT ()
+selectMulti' rs var cont1 cont2 = liftF $ SelectMult' rs var cont1 cont2 Unit     
+
+branchCont' :: Serialise c => Nat -> ProcRT c -> ProcRT c -> ProcRT c
+branchCont' role left right = liftF $ BranchCont' role left right id
 
 convert' :: ProcRT a -> STypeV ()
 convert' = convert 0
