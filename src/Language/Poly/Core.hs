@@ -96,6 +96,11 @@ data Core (a :: *)
 
     Snd   :: (CC a, CC b)
           => Core ((a, b) -> b)
+    
+    Pair  :: (CC a, CC b)
+          => Core a
+          -> Core b
+          -> Core (a, b)
 
     Split :: (CC a, CC b, CC c)
           => a :-> b

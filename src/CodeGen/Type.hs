@@ -13,6 +13,7 @@ data SingleType a where
     LabelSingleType :: SingleType Label
     UnionSingleType :: (Typeable a, Typeable b) => SingleType a -> SingleType b -> SingleType (Either a b)
     UnitSingleType :: SingleType ()
+    ProductSingleType :: (Typeable a, Typeable b) => SingleType a -> SingleType b -> SingleType (a, b)
 
 data NumType a where
     IntegralNumType :: IntegralType a -> NumType a
@@ -83,3 +84,6 @@ instance Repr Float where
 
 instance (Repr a, Repr b) => Repr (Either a b) where
     singleType = UnionSingleType singleType singleType
+
+instance (Repr a, Repr b) => Repr (a, b) where
+    singleType = ProductSingleType singleType singleType
