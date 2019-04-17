@@ -20,5 +20,6 @@ sr:
 	stack run
 
 cr: clean run 
+	@echo "Hello, World in the end"
 
 .PHONY: build clean run cr sr

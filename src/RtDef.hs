@@ -108,6 +108,8 @@ convert n (Free (Select' r v cont1 cont2 next)) = Free
     )
 convert n (Free (Branch' r left right next)) =
     Free (B r (convert 0 left) (convert 0 right) (convert n next))
+convert n (Free (BranchCont' r left right cont)) =
+    Free (B r (convert 0 left) (convert 0 right) $ convert (n + 1) (cont $ Var n))
 
 eraseSessionInfo' :: Proc' i j a -> ProcRT a
 eraseSessionInfo' (F.Pure v) = Pure v

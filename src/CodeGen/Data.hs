@@ -30,6 +30,7 @@ data Instr where
   CInitChan :: Channel a -> Instr
   CDeleteChan :: Channel a -> Instr
   CSend :: Channel a -> Exp a -> Instr
+  -- the Assumption for CRecv is that Exp a is always the variable, which value will be written to
   CRecv :: Channel a -> Exp a -> Instr
   CEnd :: SingleType a -> Exp a -> Instr
   CDecla :: Int -> SingleType a -> Instr

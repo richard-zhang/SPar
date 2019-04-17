@@ -14,15 +14,23 @@
 {-# LANGUAGE UndecidableInstances #-}
 module Def where
 
-import Control.Monad.Free
-import Control.Monad.Indexed
-import qualified Control.Monad.Indexed.Free as F
-import Data.Kind
-import Data.Singletons
-import Data.Type.Natural (Nat, snat, ZSym0)
-import Language.Poly.Core (Core (..), Serialise)
-import Prelude hiding (return, (>>), (>>=))
-import Type
+import           Control.Monad.Free
+import           Control.Monad.Indexed
+import qualified Control.Monad.Indexed.Free    as F
+import           Data.Kind
+import           Data.Singletons
+import           Data.Type.Natural              ( Nat
+                                                , snat
+                                                , ZSym0
+                                                )
+import           Language.Poly.Core             ( Core(..)
+                                                , Serialise
+                                                )
+import           Prelude                 hiding ( return
+                                                , (>>)
+                                                , (>>=)
+                                                )
+import           Type
 
 data ProcF (i :: SType * *) (j :: SType * *) next where
     Send :: (Serialise a) => Sing (n :: Nat) -> Core a -> next -> ProcF ('Free ('S n a j)) j next
@@ -31,12 +39,12 @@ data ProcF (i :: SType * *) (j :: SType * *) next where
     Select :: (Serialise a, Serialise b, Serialise c) => Sing (n :: Nat) -> Core (Either a b) -> (Core a -> Proc' left ('Pure ()) c) -> (Core b -> Proc' right ('Pure ()) c) -> next -> ProcF ('Free ('Se n left right j)) j next
 
 type Proc' i j a = F.IxFree ProcF i j (Core a)
-type Proc (i :: SType * *) a = forall j. F.IxFree ProcF (i >*> j) j (Core a)
+type Proc (i :: SType * *) a = forall j . F.IxFree ProcF (i >*> j) j (Core a)
 
 instance Functor (ProcF i j) where
-    fmap f (Send a v n)                  = Send a v $ f n
-    fmap f (Recv a cont)                 = Recv a (f . cont)
-    fmap f (Branch r left right n)       = Branch r left right $ f n
+    fmap f (Send a v n                 ) = Send a v $ f n
+    fmap f (Recv a cont                ) = Recv a (f . cont)
+    fmap f (Branch r left right n      ) = Branch r left right $ f n
     fmap f (Select r v cont1 cont2 next) = Select r v cont1 cont2 (f next)
 
 instance IxFunctor ProcF where
@@ -120,7 +128,10 @@ test1 = do
 
 test2 = branch [snat|0|] (send [snat|0|] (Lit 20 :: Core Int)) (recv [snat|0|])
 
-test3 = select [snat|2|] (Lit (Right () :: Either () ())) (\_ -> recv [snat|2|]) (\_ -> send [snat|2|] (Lit 30 :: Core Int))
+test3 = select [snat|2|]
+               (Lit (Right () :: Either () ()))
+               (\_ -> recv [snat|2|])
+               (\_ -> send [snat|2|] (Lit 30 :: Core Int))
 
 p0 = Process [snat|0|] test
 p1 = Process [snat|1|] test1
@@ -132,7 +143,7 @@ ps2 = PCons p2 (PCons p3 PNil)
 
 cgTest0 = send [snat|1|] (Lit 10 :: Core Int)
 
-cgTest1 = do 
+cgTest1 = do
     x :: Core Int <- recv [snat|0|]
     return x
 
