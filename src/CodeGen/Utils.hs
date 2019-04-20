@@ -31,6 +31,9 @@ voidSpec = CVoidType undefNode
 intSpec :: CTypeSpec
 intSpec = CIntType undefNode
 
+idSpec :: String -> CTypeSpec
+idSpec str = CTypeDef (internalIdent str) undefNode
+
 ty :: Ident -> CTypeSpec
 ty = flip CTypeDef undefNode
 

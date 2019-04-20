@@ -21,23 +21,6 @@ import           Language.Poly.Core
 import           RtDef
 import           Rt                             ( checkDual )
 
-instance MonadIO Identity where
-    liftIO = Identity . unsafePerformIO
-
--- error "the list of processes are not dual"
-codeGenDebug :: Repr a => [ProcessRT a] -> IO ()
-codeGenDebug xs
-    | checkDual xs = writeFile "codegen/code.c" (headers ++ source ++ "\n")
-    | otherwise =  putStrLn "List of processes are not dual"
-    >> writeFile "codegen/code.c" (headers ++ source ++ "\n")
-  where
-    source  = (show . pretty . testCodeGen) xs
-    headers = concatMap (\x -> "#include<" ++ x ++ ".h>\n")
-                        ["stdint", "stdio", "chan", "pthread"]
-
-testCodeGen :: Repr a => [ProcessRT a] -> CTranslUnit
-testCodeGen xs = evalCodeGen $ traverseToCodeGen singleType xs
-
 data ExtraContext = ExtraContext {
     ruleForPureCg :: CgRule
 }
@@ -47,6 +30,23 @@ data CgRule where
     RReturn :: CgRule -- return statement when reaching Pure
     RAssign :: Int -> CgRule -- Assign value to the variable
     RIgnore :: CgRule -- ignore the result 
+
+instance MonadIO Identity where
+    liftIO = Identity . unsafePerformIO
+
+-- error "the list of processes are not dual"
+codeGenDebug :: Repr a => [ProcessRT a] -> IO ()
+codeGenDebug xs
+    | otherwise = codeGen --- | checkDual xs = codeGen
+    | otherwise    = putStrLn "List of processes are not dual" >> codeGen
+  where
+    codeGen = writeFile "codegen/code.c" (headers ++ source ++ "\n")
+    source  = (show . pretty . testCodeGen) xs
+    headers = concatMap (\x -> "#include<" ++ x ++ ".h>\n")
+                        ["stdint", "stdio", "chan", "pthread"]
+
+testCodeGen :: Repr a => [ProcessRT a] -> CTranslUnit
+testCodeGen xs = evalCodeGen $ traverseToCodeGen singleType xs
 
 traverseToCodeGen
     :: MonadIO m
@@ -182,6 +182,46 @@ traverseToCodeGen stype = mapM $ uncurry $ helper stype
                     ]
             restOfInstrs <- helper_ stype next role cxt
             return (instrs Seq.>< restOfInstrs)
+    helper_ stype (Free (SelectMult' receivers (exp :: Core (Either a b)) left right next)) role cxt
+        = do
+            varEitherName <- freshVarName
+            varLabelName  <- freshVarName
+            let varLabel = Var $ fromIntegral varLabelName :: Core Label
+            sendInstrs <- mapM
+                (getSendValueChanInstr (Exp varLabel singleTypeLabel)
+                                       singleTypeLabel
+                                       role
+                )
+                receivers
+            varLeftVarName  <- freshVarName
+            varRightVarName <- freshVarName
+            let varLeft  = Var $ fromIntegral varLeftVarName :: Core a
+            let varRight = Var $ fromIntegral varRightVarName :: Core b
+            leftSeqs <- helper_ singleType (left varLeft) role
+                $ updateIgnore cxt
+            rightSeqs <- helper_ singleType (right varRight) role
+                $ updateIgnore cxt
+            updateEitherTypeCollects (singleType :: SingleType (Either a b))
+            let
+                instrs =
+                    Seq.fromList
+                        $  [ CDecla varEitherName
+                                    (singleType :: SingleType (Either a b))
+                           , CAssgn varEitherName $ Exp exp singleType
+                           , CDecla varLabelName singleTypeLabel
+                           , CEither2Label varEitherName varLabelName
+                           ]
+                        ++ sendInstrs
+                        ++ [ CDecla varLeftVarName  (singleType :: SingleType a)
+                           , CDecla varRightVarName (singleType :: SingleType b)
+                           , CSelect varEitherName
+                                     varLeftVarName
+                                     varRightVarName
+                                     leftSeqs
+                                     rightSeqs
+                           ]
+            restOfInstrs <- helper_ stype next role cxt
+            return (instrs Seq.>< restOfInstrs)
     helper_ stype (Free (Rec' _ next)) role cxt = do
         restOfInstrs <- helper_ stype next role cxt
         return restOfInstrs
@@ -189,3 +229,12 @@ traverseToCodeGen stype = mapM $ uncurry $ helper stype
 
     updateCxt rule a = a { ruleForPureCg = rule }
     updateIgnore = updateCxt RIgnore
+
+    getSendValueChanInstr
+        :: Monad m => Exp a -> SingleType a -> Nat -> Nat -> CodeGen m Instr
+    getSendValueChanInstr exp sType sender receiver = do
+        let chanKey =
+                ChanKey { chanCreator = sender, chanDestroyer = receiver }
+        cid <- getChannelAndUpdateChanTable2 chanKey sender
+        let chan = Channel cid sType
+        return $ CSend chan exp

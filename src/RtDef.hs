@@ -71,10 +71,10 @@ select'
     -> (Core a -> ProcRT c)
     -> (Core b -> ProcRT c)
     -> ProcRT ()
-select' role var cont1 cont2 = liftF $ Select' role var cont1 cont2 Unit
+select' role var cont1 cont2 = liftF $ Select' role var cont1 cont2 (Lit ())
 
 branch' :: Serialise c => Nat -> ProcRT c -> ProcRT c -> ProcRT ()
-branch' role left right = liftF $ Branch' role left right Unit
+branch' role left right = liftF $ Branch' role left right (Lit ())
 
 selectMulti' 
     :: (Serialise a, Serialise b, Serialise c)
@@ -83,7 +83,7 @@ selectMulti'
     -> (Core a -> ProcRT c)
     -> (Core b -> ProcRT c)
     -> ProcRT ()
-selectMulti' rs var cont1 cont2 = liftF $ SelectMult' rs var cont1 cont2 Unit     
+selectMulti' rs var cont1 cont2 = liftF $ SelectMult' rs var cont1 cont2 (Lit ())
 
 branchCont' :: Serialise c => Nat -> ProcRT c -> ProcRT c -> ProcRT c
 branchCont' role left right = liftF $ BranchCont' role left right id
@@ -250,9 +250,29 @@ recTest' = select' one (Lit (Right () :: Either () ()))
             (\_ -> return (Lit ()))
     )
 
+-- zero
+branchCont = (branchCont' one (do y :: Core Int <- recv' one; return y) (do y :: Core Int <- recv' one; return y)) >>= (\x -> send' one x)
+-- one
+coBranchCont = ( select' zero (Lit (Left () :: Either () ()))
+    (\_ -> send' zero (Lit (3 :: Int)))
+    (\_ -> send' zero (Lit (5 :: Int)))
+    ) >>= (\_ -> recv' zero :: ProcRT Int)
+cgts5 = [(branchCont, zero), (coBranchCont, one)]
+
+-- Select broadcast
+headProc = selectMulti' [one, two, three] (Lit (Left () :: Either () ())) (\_ -> return (Lit ())) (\_ -> return (Lit ()))
+oneProc = branch' zero (ignoreOutput $ do y :: Core Int <- recv' two; return y) (ignoreOutput $ do y :: Core Int <- recv' three; return y)
+twoProc = branch' zero (ignoreOutput $ do send' one (Lit (3 :: Int)); x :: Core Int <- recv' three; return x) (ignoreOutput $ return (Lit ()))
+threeProc = branch' zero (ignoreOutput $ do send' two (Lit (4 :: Int))) (ignoreOutput $ do send' one (Lit (3 :: Int)))
+cgts6 = [(headProc, zero), (oneProc, one), (twoProc, two), (threeProc, three)]
+
+-- test nested type
+nestedBranch = branch' one cgt0 cgt1' 
+nestedSelect = select' zero (Lit (Left () :: Either () (Either () ()))) (\_ -> cgt1) (\_ -> cgt0')
+
+cgts7 = [(nestedBranch, zero), (nestedSelect, one)]
 
 cgb = branch' one cgt0 cgt1' 
-
 cgs = select' zero (Lit (Left () :: Either () ())) (\_ -> cgt1) (\_ -> cgt0')
 
 cgts1 = [(cgt0, zero), (cgt1, one)]

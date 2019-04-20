@@ -22,6 +22,12 @@ import           Type.Reflection
 import           Language.Poly.Core
 import           RtDef
 
+infixr 3 ***
+infixr 3 &&&
+infixr 2 +++
+infixr 2 |||
+infixr 1 >>>, <<<
+
 -- recv from the 1, split (usually) and send left part to 2, right part to thrid to 3
 type Divider = Nat -> Nat -> Nat -> ProcRT ()
 
@@ -55,22 +61,25 @@ data Pipe a (b  :: Type) =
 
 --  id
 arrowId :: Serialise a => Nat -> Nat -> Pipe a a
-arrowId = liftCoreF id
+arrowId = arr id
 
 -- >>>
-compose
+(>>>)
   :: (Nat -> Nat -> Pipe a b)
   -> (Nat -> Nat -> Pipe b c)
   -> (Nat -> Nat -> Pipe a c)
-compose leftArrow rightArrow sender receiver = compose' leftP rightP
+(>>>) leftArrow rightArrow sender receiver = compose' leftP rightP
  where
   leftP  = leftArrow sender sender
   rightP = rightArrow receiver receiver
 
+(<<<) :: (Nat -> Nat -> Pipe b c) -> (Nat -> Nat -> Pipe a b) -> Nat -> Nat -> Pipe a c
+(<<<) = flip (>>>)
+
 -- arr
-liftCoreF
+arr
   :: (Serialise a, Serialise b) => (Core a -> Core b) -> Nat -> Nat -> Pipe a b
-liftCoreF f sender receiver
+arr f sender receiver
   | sender /= receiver = Pipe { start = (sender, typeRep)
                               , cont  = procSend
                               , env   = Map.singleton receiver procRecv
@@ -86,13 +95,13 @@ liftCoreF f sender receiver
   procSend = toAProcRTFunc (\x -> send' receiver x)
 
 -- (***) :: a b c -> a b' c' -> a (b, b') (c, c')
-generalMerger
+(***)
   :: (Nat -> Nat -> Pipe b c)
   -> (Nat -> Nat -> Pipe b' c')
   -> Nat
   -> Nat
   -> Pipe (b, b') (c, c')
-generalMerger leftArrow rightArrow sender receiver = generalMerger' leftP
+(***) leftArrow rightArrow sender receiver = generalMerger' leftP
                                                                     rightP
                                                                     sender
                                                                     receiver
@@ -101,13 +110,13 @@ generalMerger leftArrow rightArrow sender receiver = generalMerger' leftP
   rightP = rightArrow (S $ getMaximum leftP) (S $ getMaximum rightP)
 
 -- (&&&) :: a b c -> a b c' -> a b (c, c')
-merge
+(&&&)
   :: (Nat -> Nat -> Pipe b c)
   -> (Nat -> Nat -> Pipe b c')
   -> Nat
   -> Nat
   -> Pipe b (c, c')
-merge leftArrow rightArrow sender receiver = merger' leftP
+(&&&) leftArrow rightArrow sender receiver = merger' leftP
                                                      rightP
                                                      sender
                                                      receiver
@@ -116,13 +125,13 @@ merge leftArrow rightArrow sender receiver = merger' leftP
   rightP = rightArrow (S $ getMaximum leftP) (S $ getMaximum rightP)
 
 -- (+++)
-generalSelector
+(+++)
   :: (Nat -> Nat -> Pipe a c)
   -> (Nat -> Nat -> Pipe b d)
   -> Nat
   -> Nat
   -> Pipe (Either a b) (Either c d)
-generalSelector leftArrow rightArrow sender receiver = generalSelector'
+(+++) leftArrow rightArrow sender receiver = generalSelector'
   leftP
   rightP
   sender
@@ -132,13 +141,13 @@ generalSelector leftArrow rightArrow sender receiver = generalSelector'
   rightP = rightArrow (S sender) receiver
 
 -- (|||)
-selector
+(|||)
   :: (Nat -> Nat -> Pipe a c)
   -> (Nat -> Nat -> Pipe b c)
   -> Nat
   -> Nat
   -> Pipe (Either a b) c
-selector leftArrow rightArrow sender receiver = selector' leftP
+(|||) leftArrow rightArrow sender receiver = selector' leftP
                                                           rightP
                                                           sender
                                                           receiver

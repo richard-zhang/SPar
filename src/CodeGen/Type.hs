@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 module CodeGen.Type where
 
@@ -14,6 +15,20 @@ data SingleType a where
     UnionSingleType :: (Typeable a, Typeable b) => SingleType a -> SingleType b -> SingleType (Either a b)
     UnitSingleType :: SingleType ()
     ProductSingleType :: (Typeable a, Typeable b) => SingleType a -> SingleType b -> SingleType (a, b)
+
+equal :: SingleType a -> SingleType b -> Bool
+equal (NumSingleType (IntegralNumType _)) (NumSingleType (IntegralNumType _)) = True
+equal LabelSingleType LabelSingleType = True
+equal (UnionSingleType a b) (UnionSingleType a' b') = equal a a' && equal b b'
+equal (ProductSingleType a b) (UnionSingleType a' b') = equal a a' && equal b b'
+equal UnitSingleType UnitSingleType = True
+equal _ _ = False
+
+instance Eq (SingleType a) where
+    (==) = equal
+
+instance Ord (SingleType a) where 
+    compare _ _ = LT
 
 data NumType a where
     IntegralNumType :: IntegralType a -> NumType a
