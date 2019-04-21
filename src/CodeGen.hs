@@ -13,6 +13,8 @@ import           Data.Type.Natural
 import           Language.C
 import           Language.C.Pretty
 import           System.IO.Unsafe
+import           System.Process
+import           System.Exit
 
 import           CodeGen.Data
 import           CodeGen.Monad
@@ -37,13 +39,26 @@ instance MonadIO Identity where
 -- error "the list of processes are not dual"
 codeGenDebug :: Repr a => [ProcessRT a] -> IO ()
 codeGenDebug xs
-    | otherwise = codeGen --- | checkDual xs = codeGen
-    | otherwise    = putStrLn "List of processes are not dual" >> codeGen
+    | otherwise = codeGen
+    | --- | checkDual xs = codeGen
+      otherwise = putStrLn "List of processes are not dual" >> codeGen
   where
     codeGen = writeFile "codegen/code.c" (headers ++ source ++ "\n")
     source  = (show . pretty . testCodeGen) xs
     headers = concatMap (\x -> "#include<" ++ x ++ ".h>\n")
                         ["stdint", "stdio", "chan", "pthread"]
+
+codeGenBuildRun :: Repr a => [ProcessRT a] -> IO Bool
+codeGenBuildRun xs = do
+    codeGenDebug xs
+    (rc, _, _) <- readCreateProcessWithExitCode (shell "make build") []
+    case rc of
+        ExitSuccess -> do
+            (rcC, _, _) <- readCreateProcessWithExitCode (shell "make run") []
+            case rcC of
+                ExitSuccess -> return True
+                _           -> putStrLn "Failed at the runtime" >> return False
+        _ -> putStrLn "Failed at the build time" >> return False
 
 testCodeGen :: Repr a => [ProcessRT a] -> CTranslUnit
 testCodeGen xs = evalCodeGen $ traverseToCodeGen singleType xs
@@ -163,7 +178,7 @@ traverseToCodeGen stype = mapM $ uncurry $ helper stype
                 $ updateIgnore cxt
             rightSeqs <- helper_ singleType (right varRight) role
                 $ updateIgnore cxt
-            updateEitherTypeCollects (singleType :: SingleType (Either a b))
+            updateSumTypeCollect (singleType :: SingleType (Either a b))
             let
                 instrs = Seq.fromList
                     [ CDecla varEitherName
@@ -201,7 +216,7 @@ traverseToCodeGen stype = mapM $ uncurry $ helper stype
                 $ updateIgnore cxt
             rightSeqs <- helper_ singleType (right varRight) role
                 $ updateIgnore cxt
-            updateEitherTypeCollects (singleType :: SingleType (Either a b))
+            updateSumTypeCollect (singleType :: SingleType (Either a b))
             let
                 instrs =
                     Seq.fromList

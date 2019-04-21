@@ -92,43 +92,35 @@ stypeToCExpr (NumSingleType numType) v = numTypeToCExpr numType v
 stypeToCExpr LabelSingleType         v = case v of
   Le -> cVar "LEFT"
   Ri -> cVar "RIGHT"
-stypeToCExpr (UnionSingleType a b) v = case v of
+stypeToCExpr s@(UnionSingleType a b) v = case v of
   Left  v1 -> helper "left" $ stypeToCExpr a v1
   Right v2 -> helper "right" $ stypeToCExpr b v2
  where
   -- empCompoundLit [([], initExp $ cVar $ fmap toUpper str), ([], initList [([memberDesig str], initExp expr)])]
   helper str expr = defCompoundLit
-    defName
+    (show s)
     [ ([], initExp $ cVar $ fmap toUpper str)
     , ([], initList [([memberDesig str], initExp expr)])
     ]
-  defName = eitherName (stypeToTypeRep a) (stypeToTypeRep b)
 stypeToCExpr UnitSingleType _ = CConst (CIntConst (cInteger 0) undefNode)
-stypeToCExpr (ProductSingleType a b) v = defCompoundLit
-  defName
+stypeToCExpr s@(ProductSingleType a b) v = defCompoundLit
+  (show s)
   [ ([], initExp $ stypeToCExpr a (fst v))
   , ([], initExp $ stypeToCExpr b (snd v))
   ]
-  where defName = productName (stypeToTypeRep a) (stypeToTypeRep b)
 
 unionCExp :: Either (Exp a) (Exp b) -> SingleType (Either a b) -> CExpr
-unionCExp exp (UnionSingleType sa sb) =
-  let defName = eitherName (stypeToTypeRep sa) (stypeToTypeRep sb)
-  in  case exp of
-        Left expL -> defCompoundLit
-          defName
-          [ ([], initExp $ cVar "LEFT")
-          , ( []
-            , initList [([memberDesig "left"], initExp $ convertToCExpr expL)]
-            )
-          ]
-        Right expR -> defCompoundLit
-          defName
-          [ ([], initExp $ cVar "RIGHT")
-          , ( []
-            , initList [([memberDesig "right"], initExp $ convertToCExpr expR)]
-            )
-          ]
+unionCExp exp s@(UnionSingleType sa sb) = case exp of
+  Left expL -> defCompoundLit
+    (show s)
+    [ ([], initExp $ cVar "LEFT")
+    , ([], initList [([memberDesig "left"], initExp $ convertToCExpr expL)])
+    ]
+  Right expR -> defCompoundLit
+    (show s)
+    [ ([], initExp $ cVar "RIGHT")
+    , ([], initList [([memberDesig "right"], initExp $ convertToCExpr expR)])
+    ]
 
 getLeftUnionType :: SingleType (Either a b) -> SingleType a
 getLeftUnionType (UnionSingleType sa sb) = sa
@@ -211,11 +203,13 @@ declAndRunThread :: Nat -> [CBlockItem]
 declAndRunThread role =
   [CBlockDecl $ declThread role, liftEToB $ runThread role]
 
-typeToTypeSpec :: TypeRep -> CTypeSpec
-typeToTypeSpec x | x == (typeRep $ Proxy @Int)   = CIntType undefNode
-                 | x == (typeRep $ Proxy @Float) = CFloatType undefNode
-                 | x == (typeRep $ Proxy @())    = CIntType undefNode
-                 | otherwise = idSpec $ eitherName (typeOf ()) (typeOf ())
+stypeToTypeSpec :: SingleType a -> CTypeSpec
+stypeToTypeSpec stype = case stype of
+  (NumSingleType (IntegralNumType _)) -> CIntType undefNode
+  (NumSingleType (FloatingNumType _)) -> CFloatType undefNode
+  UnitSingleType                      -> CIntType undefNode
+  LabelSingleType                     -> idSpec "Label"
+  _                                   -> idSpec $ show stype
 
 stypeToCDecl :: SingleType a -> Int -> CDecl
 stypeToCDecl (NumSingleType (IntegralNumType (TypeInt _))) x =
@@ -224,36 +218,13 @@ stypeToCDecl (NumSingleType (FloatingNumType (TypeFloat _))) x =
   decl floatTy (cDeclr (varName_ x)) Nothing
 stypeToCDecl LabelSingleType x = decl labelTy (cDeclr (varName_ x)) Nothing
 stypeToCDecl UnitSingleType  x = decl intTy (cDeclr (varName_ x)) Nothing
-stypeToCDecl (UnionSingleType a b) x =
-  decl (eitherTy a b) (cDeclr (varName_ x)) Nothing
-stypeToCDecl (ProductSingleType a b) x =
-  decl (productTy a b) (cDeclr (varName_ x)) Nothing
+stypeToCDecl s@(UnionSingleType _ _) x =
+  decl (sumOrProductTy s) (cDeclr (varName_ x)) Nothing
+stypeToCDecl s@(ProductSingleType _ _) x =
+  decl (sumOrProductTy s) (cDeclr (varName_ x)) Nothing
 
-eitherName :: TypeRep -> TypeRep -> String
-eitherName x y = intercalate "_" ["Sum", showType x, showType y]
-
-eitherTy_ :: (Typeable a, Typeable b) => SingleType a -> SingleType b -> String
-eitherTy_ (_ :: SingleType a) (_ :: SingleType b) =
-  eitherName (typeOf (undefined :: a)) (typeOf (undefined :: b))
-
-eitherTy
-  :: (Typeable a, Typeable b) => SingleType a -> SingleType b -> CDeclSpec
-eitherTy a b = defTy $ eitherTy_ a b
-
-productName :: TypeRep -> TypeRep -> String
-productName x y = intercalate "_" ["Product", showType x, showType y]
-
-productTy_ :: (Typeable a, Typeable b) => SingleType a -> SingleType b -> String
-productTy_ (_ :: SingleType a) (_ :: SingleType b) =
-  productName (typeOf (undefined :: a)) (typeOf (undefined :: b))
-
-productTy
-  :: (Typeable a, Typeable b) => SingleType a -> SingleType b -> CDeclSpec
-productTy a b = defTy $ eitherTy_ a b
-
-showType :: TypeRep -> String
-showType x | x == (typeRep $ Proxy @()) = "unit"
-           | otherwise = fmap (\x -> if x == ' ' then '_' else x) $ show x
+sumOrProductTy :: SingleType a -> CDeclSpec
+sumOrProductTy a = CTypeSpec $ stypeToTypeSpec a
 
 labelTy :: CDeclSpec
 labelTy = defTy "Label"
@@ -296,17 +267,16 @@ labelField = CDecl [defTy "Label"]
                    [(Just $ fromString "label", Nothing, Nothing)]
                    undefNode
 
-eitherTypeDecl :: [(TypeRep, TypeRep)] -> [CExtDecl]
-eitherTypeDecl = fmap (CDeclExt . uncurry taggedUnionStruct)
+sumTypeDecl :: [ASingleType] -> [CExtDecl]
+sumTypeDecl = fmap (CDeclExt . taggedUnionStruct)
 
-anoyValueUnion :: TypeRep -> TypeRep -> CDecl
-anoyValueUnion left right = anoyUnion
-  "value"
-  [("left", typeToTypeSpec left), ("right", typeToTypeSpec right)]
+anoyValueUnion :: SingleType a -> CDecl
+anoyValueUnion s@(UnionSingleType a b) =
+  anoyUnion "value" [("left", stypeToTypeSpec a), ("right", stypeToTypeSpec b)]
 
-taggedUnionStruct :: TypeRep -> TypeRep -> CDecl
-taggedUnionStruct a b =
-  csu2 CStructTag (eitherName a b) [labelField, anoyValueUnion a b]
+taggedUnionStruct :: ASingleType -> CDecl
+taggedUnionStruct (ASingleType stype) =
+  csu2 CStructTag (show stype) [labelField, anoyValueUnion stype]
 
 mainFuncStat :: CID -> [Nat] -> CStat
 mainFuncStat cid roles = CCompound

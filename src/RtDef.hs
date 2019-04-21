@@ -228,6 +228,8 @@ good' = rec' 0 $ do
     send' one (Lit 20 :: Core Int)
     mu' 0
 
+cgts3 = [(good', zero), (good, one)]
+
 recTest = rec' 0 $ branch' zero 
     (do 
         send' zero (Lit 1 :: Core Int)
@@ -250,6 +252,8 @@ recTest' = select' one (Lit (Right () :: Either () ()))
             (\_ -> return (Lit ()))
     )
 
+cgts4 = [(recTest', zero), (recTest, one)]
+
 -- zero
 branchCont = (branchCont' one (do y :: Core Int <- recv' one; return y) (do y :: Core Int <- recv' one; return y)) >>= (\x -> send' one x)
 -- one
@@ -268,9 +272,11 @@ cgts6 = [(headProc, zero), (oneProc, one), (twoProc, two), (threeProc, three)]
 
 -- test nested type
 nestedBranch = branch' one cgt0 cgt1' 
-nestedSelect = select' zero (Lit (Left () :: Either () (Either () ()))) (\_ -> cgt1) (\_ -> cgt0')
+nestedSelectOne = select' zero (Lit (Right (Left ()) :: Either () (Either () ()))) (\_ -> cgt1) (\_ -> cgt0')
+nestedSelectTwo = select' zero (Lit (Left () :: Either () (Either () ()))) (\_ -> cgt1) (\_ -> cgt0')
 
-cgts7 = [(nestedBranch, zero), (nestedSelect, one)]
+cgts7 = [(nestedBranch, zero), (nestedSelectOne, one)]
+cgts8 = [(nestedBranch, zero), (nestedSelectTwo, one)]
 
 cgb = branch' one cgt0 cgt1' 
 cgs = select' zero (Lit (Left () :: Either () ())) (\_ -> cgt1) (\_ -> cgt0')
@@ -278,5 +284,3 @@ cgs = select' zero (Lit (Left () :: Either () ())) (\_ -> cgt1) (\_ -> cgt0')
 cgts1 = [(cgt0, zero), (cgt1, one)]
 cgts1' = [(ignoreOutput cgt0, zero), (ignoreOutput cgt1, one)]
 cgts2 = [(cgb, zero), (cgs, one)]
-cgts3 = [(good', zero), (good, one)]
-cgts4 = [(recTest', zero), (recTest, one)]

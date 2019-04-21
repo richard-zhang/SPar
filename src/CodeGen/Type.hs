@@ -3,11 +3,14 @@
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE RankNTypes                #-}
+{-# LANGUAGE ExistentialQuantification #-}
 module CodeGen.Type where
 
-import Data.Bits
-import Data.Typeable
-import Foreign.Storable                                             ( Storable )
+import           Data.Bits
+import           Data.Typeable
+import           Data.List
+import           Foreign.Storable               ( Storable )
 
 data SingleType a where
     NumSingleType :: NumType a -> SingleType a
@@ -16,19 +19,55 @@ data SingleType a where
     UnitSingleType :: SingleType ()
     ProductSingleType :: (Typeable a, Typeable b) => SingleType a -> SingleType b -> SingleType (a, b)
 
+data ASingleType where
+    ASingleType :: forall a. SingleType a -> ASingleType
+
 equal :: SingleType a -> SingleType b -> Bool
-equal (NumSingleType (IntegralNumType _)) (NumSingleType (IntegralNumType _)) = True
-equal LabelSingleType LabelSingleType = True
+equal (NumSingleType (IntegralNumType _)) (NumSingleType (IntegralNumType _)) =
+    True
+equal (NumSingleType (FloatingNumType _)) (NumSingleType (FloatingNumType _)) =
+    True
+equal LabelSingleType       LabelSingleType         = True
 equal (UnionSingleType a b) (UnionSingleType a' b') = equal a a' && equal b b'
-equal (ProductSingleType a b) (UnionSingleType a' b') = equal a a' && equal b b'
+equal (ProductSingleType a b) (UnionSingleType a' b') =
+    equal a a' && equal b b'
 equal UnitSingleType UnitSingleType = True
-equal _ _ = False
+equal _              _              = False
+
+height :: SingleType a -> Int
+height (NumSingleType _) = 0 
+height LabelSingleType = 0
+height (UnionSingleType a b) = 1 + max (height a) (height b)
+height (ProductSingleType a b) = 1 + max (height a) (height b)
+height (UnitSingleType) = 0
+
+compareSingleType :: SingleType a -> SingleType b -> Ordering
+compareSingleType a b 
+    | a `equal` b = EQ
+    | otherwise = (height a) `compare` (height b)
+
+instance Show (SingleType a) where
+    show (NumSingleType (IntegralNumType _)) = "int"
+    show (NumSingleType (FloatingNumType _)) = "float"
+    show (UnionSingleType a b) = intercalate "_" ["Sum", show a, show b]
+    show (ProductSingleType a b) = intercalate "_" ["Prod", show a, show b]
+    show UnitSingleType = "unit"
+    show LabelSingleType = "Label"
+
+toASingleType :: SingleType a -> ASingleType
+toASingleType stype = ASingleType stype
 
 instance Eq (SingleType a) where
     (==) = equal
 
-instance Ord (SingleType a) where 
-    compare _ _ = LT
+instance Ord (SingleType a) where
+    compare a b = compareSingleType a b
+
+instance Eq (ASingleType) where
+    (ASingleType left) == (ASingleType right) = equal left right
+
+instance Ord ASingleType where
+    compare (ASingleType left) (ASingleType right) = compareSingleType left right
 
 data NumType a where
     IntegralNumType :: IntegralType a -> NumType a
@@ -48,7 +87,7 @@ data IntegralDict a where
     -- IntegralDict :: ( Bounded a, Eq a, Ord a, Show a
                     -- , Bits a, FiniteBits a, Integral a, Num a, Real a, Storable a )
                     -- => IntegralDict a
-    
+
 data FloatingDict a where
     FloatingDict :: ( Typeable a, Eq a, Ord a, Show a
                     , Floating a, Fractional a, Num a, Real a, RealFrac a

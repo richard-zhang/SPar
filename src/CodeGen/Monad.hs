@@ -28,7 +28,7 @@ data CodeGenState = CodeGenState
     flagTable :: Map ChanKey Nat, -- flag to indiciate which process is encountered first in the code generation
     varNext   :: Int,
     chanNext  :: CID,
-    eitherTypeCollects :: Set (TypeRep, TypeRep),
+    sumTypeCollect :: Set ASingleType,
     newChanTable :: Map ChanKey CID
   }
 
@@ -47,7 +47,7 @@ evalCodeGenHelper f ma = codeGenCombined instrs st
 codeGenCombined :: [(Nat, Seq Instr)] -> CodeGenState -> CTranslUnit
 codeGenCombined instrs state = CTranslUnit
     (  [labelEnum]
-    ++ eitherTypeDecls
+    ++ sumTypeDecls
     ++ channelDecls
     ++ funcsRt
     ++ funcsCaller
@@ -55,21 +55,21 @@ codeGenCombined instrs state = CTranslUnit
     )
     undefNode
   where
-    cid             = chanNext state
-    channelDecls    = chanDecls cid
-    roles           = fmap fst instrs
-    eitherTypeDecls = eitherTypeDecl $ Set.toList $ eitherTypeCollects state
-    main            = [CFDefExt $ mainFunc cid roles]
-    funcsRt         = fmap (CFDefExt . uncurry instrToFuncRt) instrs
-    funcsCaller     = fmap (CFDefExt . pthreadFunc . fst) instrs
+    cid          = chanNext state
+    channelDecls = chanDecls cid
+    roles        = fmap fst instrs
+    sumTypeDecls = sumTypeDecl $ Set.toList $ sumTypeCollect state
+    main         = [CFDefExt $ mainFunc cid roles]
+    funcsRt      = fmap (CFDefExt . uncurry instrToFuncRt) instrs
+    funcsCaller  = fmap (CFDefExt . pthreadFunc . fst) instrs
 
 initCodeGenState :: CodeGenState
-initCodeGenState = CodeGenState { chanTable          = Map.empty
-                                , flagTable          = Map.empty
-                                , varNext            = 0
-                                , chanNext           = 1
-                                , eitherTypeCollects = Set.empty
-                                , newChanTable       = Map.empty
+initCodeGenState = CodeGenState { chanTable      = Map.empty
+                                , flagTable      = Map.empty
+                                , varNext        = 0
+                                , chanNext       = 1
+                                , sumTypeCollect = Set.empty
+                                , newChanTable   = Map.empty
                                 }
 
 freshChanName :: Monad m => CodeGen m CID
@@ -147,21 +147,18 @@ getChannelAndUpdateChanTable2 key _ = do
         Just cid -> return cid
         Nothing  -> createAndAddChannel2 key
 
-updateEitherTypeCollects :: Monad m => SingleType a -> CodeGen m ()
-updateEitherTypeCollects (UnionSingleType (a :: SingleType a) (b :: SingleType b))
+updateSumTypeCollect :: Monad m => SingleType a -> CodeGen m ()
+updateSumTypeCollect stype@(UnionSingleType (a :: SingleType a) (b :: SingleType
+        b))
     = (state $ \s@CodeGenState {..} ->
-          ((), s { eitherTypeCollects = Set.insert elem eitherTypeCollects })
+          ( ()
+          , s { sumTypeCollect = Set.insert (toASingleType stype) sumTypeCollect
+              }
+          )
       )
-        >> updateEitherTypeCollects a
-        >> updateEitherTypeCollects b
-    where elem = (typeOf (undefined :: a), typeOf (undefined :: b))
-updateEitherTypeCollects _ = return ()
-
--- updateEitherTypeCollects :: (Typeable a, Typeable b, Monad m) => SingleType (Either a b) -> CodeGen m ()
--- updateEitherTypeCollects (x :: SingleType (Either a b)) =
---     state $ \s@CodeGenState{..} -> ((), s { eitherTypeCollects = Set.insert elem eitherTypeCollects }) 
---     where
---         elem = (typeOf (undefined :: a), typeOf (undefined :: b))
+        >> updateSumTypeCollect a
+        >> updateSumTypeCollect b
+updateSumTypeCollect _ = return ()
 
 -- debugging purpose
 getSeqChan :: Monad m => ChanKey -> CodeGen m (Seq CID)

@@ -1,25 +1,22 @@
-name:                spar
-version:             0.1.0.0
-github:              "Richard-zhang/spar"
-license:             BSD3
-author:              "Shuhao Zhang"
-maintainer:          "rzsh2003@gmail.com"
-copyright:           "Copyright (c) 2019 Shuhao Zhang"
-
-extra-source-files:
-- README.md
-- ChangeLog.md
-
-# Metadata used when publishing your package
-# synopsis:            Short description of your package
-# category:            Web
-
-# To avoid duplicated efforts in documentation and dealing with the
-# complications of embedding Haddock markup inside cabal files, it is
-# common to point users to the README.md file.
-description:         Please see the README on GitHub at <https://github.com/Richard-zhang/spar#readme>
-
+library:
+  source-dirs: src
+tests:
+  spar-test:
+    source-dirs: test
+    main: Spec.hs
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - spar
+    - hspec >= 2.7 && < 2.8
+    - type-spec > 0.3 && <= 0.4
+    - should-not-typecheck >= 2.1 && < 2.2
+copyright: Copyright (c) 2019 Shuhao Zhang
+maintainer: rzsh2003@gmail.com
 dependencies:
+- process >= 1.6 && < 1.7
 - base >= 4.9 && < 5
 - free >= 5.0 && < 5.1
 - mtl >= 2.2.1 && < 2.3
@@ -34,31 +31,22 @@ dependencies:
 - type-natural >= 0.8 && < 0.9
 - language-c >= 0.8 && < 0.9
 - mtl >= 2.2 && < 2.3
-
-library:
-  source-dirs: src
-
+name: spar
+version: 0.1.0.0
+extra-source-files:
+- README.md
+- ChangeLog.md
+author: Shuhao Zhang
+github: Richard-zhang/spar
+license: BSD3
 executables:
   spar-exe:
-    main:                Main.hs
-    source-dirs:         app
+    source-dirs: app
+    main: Main.hs
     ghc-options:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
     - spar
-
-tests:
-  spar-test:
-    main:                Spec.hs
-    source-dirs:         test
-    ghc-options:
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
-    dependencies:
-    - spar
-    - hspec >= 2.7 && < 2.8
-    - type-spec > 0.3 && <= 0.4
-    - should-not-typecheck >= 2.1 && < 2.2
+description: Please see the README on GitHub at <https://github.com/Richard-zhang/spar#readme>
