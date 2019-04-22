@@ -46,7 +46,7 @@ codeGenDebug xs
     codeGen = writeFile "codegen/code.c" (headers ++ source ++ "\n")
     source  = (show . pretty . testCodeGen) xs
     headers = concatMap (\x -> "#include<" ++ x ++ ".h>\n")
-                        ["stdint", "stdio", "chan", "pthread"]
+                        ["stdint", "stdio", "stdlib", "chan", "pthread"]
 
 codeGenBuildRun :: Repr a => [ProcessRT a] -> IO Bool
 codeGenBuildRun xs = do

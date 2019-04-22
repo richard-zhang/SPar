@@ -61,7 +61,7 @@ data Pipe a (b  :: Type) =
 
 --  id
 arrowId :: Serialise a => Nat -> Nat -> Pipe a a
-arrowId = arr id
+arrowId = arr Id
 
 -- >>>
 (>>>)
@@ -78,7 +78,7 @@ arrowId = arr id
 
 -- arr
 arr
-  :: (Serialise a, Serialise b) => (Core a -> Core b) -> Nat -> Nat -> Pipe a b
+  :: (Serialise a, Serialise b) => (Core (a -> b)) -> Nat -> Nat -> Pipe a b
 arr f sender receiver
   | sender /= receiver = Pipe { start = (sender, typeRep)
                               , cont  = procSend
@@ -86,12 +86,12 @@ arr f sender receiver
                               , end   = (receiver, typeRep)
                               }
   | otherwise = Pipe { start = (sender, typeRep)
-                     , cont  = toAProcRTFunc (return . f)
+                     , cont  = toAProcRTFunc (return . (f :$))
                      , env   = Map.empty
                      , end   = (receiver, typeRep)
                      }
  where
-  procRecv = toAProc (recv' sender >>= return . f)
+  procRecv = toAProc (recv' sender >>= return . (f :$))
   procSend = toAProcRTFunc (\x -> send' receiver x)
 
 -- (***) :: a b c -> a b' c' -> a (b, b') (c, c')

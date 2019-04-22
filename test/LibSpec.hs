@@ -1,6 +1,6 @@
 module LibSpec where
 
-import Lib
+import Spar
 import Test.Hspec
 
 spec :: Spec

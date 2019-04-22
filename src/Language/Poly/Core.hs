@@ -22,8 +22,8 @@ module Language.Poly.Core
   , pattern InrF
   , pattern SplitF
   , pattern CaseF
-  , pattern FstF
-  , pattern SndF
+  -- , pattern FstF
+  -- , pattern SndF
   , interp
   , polyC
   , (:->)(..)
@@ -51,6 +51,10 @@ infixr 4 :->
 
 type CC = Typeable
 
+-- class Serialise a => Bcc a where
+-- instance (Bcc a, Bcc b) => Bcc (a, b)
+-- instance (Bcc a, Bcc b) => Bcc (Either a b)
+
 type Serialise a = (Repr a, Show a, Read a, Typeable a)
 
 class Show a => Value a where
@@ -68,7 +72,7 @@ data Core (a :: *)
     Val :: Value a => a -> Core a
 
     -- Apply
-    (:$) :: Core (a -> b) -> Core a -> Core b
+    (:$) :: (Serialise a) => Core (a -> b) -> Core a -> Core b
     -- (:$) :: a :-> b -> Core a -> Core b
 
     Prim  :: String -- XXX: name of the "primitive function"
@@ -91,10 +95,10 @@ data Core (a :: *)
           -> a :-> b
           -> Core (a -> c)
 
-    Fst   :: (CC b, CC a)
+    Fst   :: (Serialise b, CC b, CC a)
           => Core ((a, b) -> a)
 
-    Snd   :: (CC a, CC b)
+    Snd   :: (Serialise a, CC a, CC b)
           => Core ((a, b) -> b)
     
     Pair  :: (CC a, CC b)
@@ -174,11 +178,11 @@ pattern CaseF :: forall i o. (CC i, CC o) => forall a b c. (i ~ Either a b, o ~ 
               => a :-> c -> b :-> c -> i :-> o
 pattern CaseF a b = Fun (Case a b)
 
-pattern FstF :: forall i o. (CC i, CC o) => forall a b. (i ~ (a,b), o ~ a, CC a, CC b) => i :-> o
-pattern FstF = Fun Fst
+-- pattern FstF :: forall i o. (CC i, CC o) => forall a b. (i ~ (a,b), o ~ a, CC a, CC b) => i :-> o
+-- pattern FstF = Fun Fst
 
-pattern SndF :: forall i o. (CC i, CC o) => forall a b. (i ~ (a,b), o ~ b, CC b, CC a) => i :-> o
-pattern SndF = Fun Snd
+-- pattern SndF :: forall i o. (CC i, CC o) => forall a b. (i ~ (a,b), o ~ b, CC b, CC a) => i :-> o
+-- pattern SndF = Fun Snd
 
 ap :: (a -> b, a) -> b
 ap (f, x) = f x
@@ -238,8 +242,8 @@ instance Category CC (:->) where
 
 instance Arrow CC (:->) where
   arr s f = Fun $ Prim s f
-  fst = Fun Fst
-  snd = Fun Snd
+  -- fst = Fun Fst
+  -- snd = Fun Snd
   (***) f g = Fun $ Split (f . fst) (g . snd)
   (&&&) f g = Fun $ Split f g
   first f = Fun $ Split (f . fst) snd

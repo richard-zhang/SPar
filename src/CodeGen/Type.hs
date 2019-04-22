@@ -12,12 +12,15 @@ import           Data.Typeable
 import           Data.List
 import           Foreign.Storable               ( Storable )
 
+-- need to find a way to represent recursive single type 
 data SingleType a where
     NumSingleType :: NumType a -> SingleType a
     LabelSingleType :: SingleType Label
     UnionSingleType :: (Typeable a, Typeable b) => SingleType a -> SingleType b -> SingleType (Either a b)
     UnitSingleType :: SingleType ()
     ProductSingleType :: (Typeable a, Typeable b) => SingleType a -> SingleType b -> SingleType (a, b)
+    ListSingleType :: Typeable a => SingleType a -> SingleType [a]
+    FuncSingleType :: (Typeable a, Typeable b) => SingleType a -> SingleType b -> SingleType (a -> b)
 
 data ASingleType where
     ASingleType :: forall a. SingleType a -> ASingleType
@@ -34,17 +37,16 @@ equal (ProductSingleType a b) (UnionSingleType a' b') =
 equal UnitSingleType UnitSingleType = True
 equal _              _              = False
 
-height :: SingleType a -> Int
-height (NumSingleType _) = 0 
-height LabelSingleType = 0
-height (UnionSingleType a b) = 1 + max (height a) (height b)
-height (ProductSingleType a b) = 1 + max (height a) (height b)
-height (UnitSingleType) = 0
+sTypeHeight :: SingleType a -> Int
+sTypeHeight (NumSingleType _)       = 0
+sTypeHeight LabelSingleType         = 0
+sTypeHeight (UnionSingleType   a b) = 1 + max (sTypeHeight a) (sTypeHeight b)
+sTypeHeight (ProductSingleType a b) = 1 + max (sTypeHeight a) (sTypeHeight b)
+sTypeHeight (UnitSingleType       ) = 0
 
 compareSingleType :: SingleType a -> SingleType b -> Ordering
-compareSingleType a b 
-    | a `equal` b = EQ
-    | otherwise = (height a) `compare` (height b)
+compareSingleType a b | a `equal` b = EQ
+                      | otherwise   = (sTypeHeight a) `compare` (sTypeHeight b)
 
 instance Show (SingleType a) where
     show (NumSingleType (IntegralNumType _)) = "int"
@@ -67,7 +69,8 @@ instance Eq (ASingleType) where
     (ASingleType left) == (ASingleType right) = equal left right
 
 instance Ord ASingleType where
-    compare (ASingleType left) (ASingleType right) = compareSingleType left right
+    compare (ASingleType left) (ASingleType right) =
+        compareSingleType left right
 
 data NumType a where
     IntegralNumType :: IntegralType a -> NumType a
@@ -118,12 +121,6 @@ singleTypeLabel = LabelSingleType
 singleTypeUnionInt :: SingleType (Either Int Int)
 singleTypeUnionInt = UnionSingleType singleTypeInt singleTypeInt
 
--- stypeToTypeRep :: SingleType a -> TypeRep
--- stypeToTypeRep LabelSingleType = typeOf (undefined :: Label)
--- stypeToTypeRep UnitSingleType = typeOf (undefined :: ())
--- stypeToTypeRep (UnionSingleType (_ :: SingleType a) (_ :: SingleType b)) = typeOf (undefined :: (Either a b))
--- stypeToTypeRep (NumSingleType (_ :: NumType a)) = typeOf (undefined :: a)
-
 class Typeable a => Repr a where
     singleType :: SingleType a
 
@@ -141,3 +138,9 @@ instance (Repr a, Repr b) => Repr (Either a b) where
 
 instance (Repr a, Repr b) => Repr (a, b) where
     singleType = ProductSingleType singleType singleType
+
+instance Repr a => Repr [a] where
+    singleType = ListSingleType singleType
+
+instance (Repr a, Repr b) => Repr (a -> b) where
+    singleType = FuncSingleType singleType singleType

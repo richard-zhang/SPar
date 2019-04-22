@@ -1,6 +1,8 @@
-module SPar
+module Spar
     ( module X
     )
 where
 
-import           Type                          as X
+import           CodeGen                       as X
+import           RtDef                         as X
+import           Pattern                       as X

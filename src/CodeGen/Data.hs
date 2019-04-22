@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE RankNTypes    #-}
 
 module CodeGen.Data where
 
@@ -12,7 +13,6 @@ import           Data.String
 import           Data.Type.Natural              ( Nat )
 import           Data.Typeable
 import           Language.C
-import           Unsafe.Coerce
 
 import           CodeGen.Type
 import           CodeGen.Utils
@@ -81,11 +81,26 @@ data ChanKey = ChanKey
 
  -- Lit x   -> CConst (CIntConst (cInteger (fromIntegral (unsafeCoerce x :: Int))) undefNode)
 convertToCExpr :: Exp a -> CExpr
-convertToCExpr (Exp exp stype) = case exp of
-  Lit x        -> stypeToCExpr stype x
-  Var num      -> CVar (internalIdent $ "v" ++ show num) undefNode
-  (Inl :$ exp) -> unionCExp (Left $ Exp exp $ getLeftUnionType stype) stype
-  (Inr :$ exp) -> unionCExp (Right $ Exp exp $ getRightUnionType stype) stype
+convertToCExpr (Exp (exp :: Core a) stype) = case exp of
+  Lit x           -> stypeToCExpr stype x
+  Var num         -> CVar (internalIdent $ "v" ++ show num) undefNode
+  (Inl :$ subExp) -> sumCExp (Left $ Exp subExp $ getLeftSumType stype) stype -- for merge
+  (Inr :$ subExp) -> sumCExp (Right $ Exp subExp $ getRightSumType stype) stype -- for merge
+  (Fst :$ subExp) -> CMember
+    (convertToCExpr $ Exp subExp (ProductSingleType stype singleType))
+    (internalIdent "fst")
+    False
+    undefNode
+  (Snd :$ subExp) -> CMember
+    (convertToCExpr $ Exp subExp (ProductSingleType singleType stype))
+    (internalIdent "snd")
+    False
+    undefNode
+  Pair l r -> productCExp (Exp l $ getLeftProdType stype)
+                          (Exp r $ getRightProdType stype)
+                          stype
+  ((Prim ident _) :$ subExp) ->
+    cVar ident # [convertToCExpr (Exp subExp singleType)]
 
 stypeToCExpr :: SingleType a -> a -> CExpr
 stypeToCExpr (NumSingleType numType) v = numTypeToCExpr numType v
@@ -109,8 +124,8 @@ stypeToCExpr s@(ProductSingleType a b) v = defCompoundLit
   , ([], initExp $ stypeToCExpr b (snd v))
   ]
 
-unionCExp :: Either (Exp a) (Exp b) -> SingleType (Either a b) -> CExpr
-unionCExp exp s@(UnionSingleType sa sb) = case exp of
+sumCExp :: Either (Exp a) (Exp b) -> SingleType (Either a b) -> CExpr
+sumCExp exp s@(UnionSingleType sa sb) = case exp of
   Left expL -> defCompoundLit
     (show s)
     [ ([], initExp $ cVar "LEFT")
@@ -122,11 +137,22 @@ unionCExp exp s@(UnionSingleType sa sb) = case exp of
     , ([], initList [([memberDesig "right"], initExp $ convertToCExpr expR)])
     ]
 
-getLeftUnionType :: SingleType (Either a b) -> SingleType a
-getLeftUnionType (UnionSingleType sa sb) = sa
+productCExp :: Exp a -> Exp b -> SingleType (a, b) -> CExpr
+productCExp a b s@(ProductSingleType sa sb) = defCompoundLit
+  (show s)
+  [([], initExp $ convertToCExpr a), ([], initExp $ convertToCExpr b)]
 
-getRightUnionType :: SingleType (Either a b) -> SingleType b
-getRightUnionType (UnionSingleType sa sb) = sb
+getLeftSumType :: SingleType (Either a b) -> SingleType a
+getLeftSumType (UnionSingleType sa sb) = sa
+
+getRightSumType :: SingleType (Either a b) -> SingleType b
+getRightSumType (UnionSingleType sa sb) = sb
+
+getLeftProdType :: SingleType (a, b) -> SingleType a
+getLeftProdType (ProductSingleType a b) = a
+
+getRightProdType :: SingleType (a, b) -> SingleType b
+getRightProdType (ProductSingleType a b) = b
 
 stypeToTypeRep :: Typeable a => SingleType a -> TypeRep
 stypeToTypeRep (x :: SingleType a) = typeOf (undefined :: a)
@@ -267,16 +293,26 @@ labelField = CDecl [defTy "Label"]
                    [(Just $ fromString "label", Nothing, Nothing)]
                    undefNode
 
-sumTypeDecl :: [ASingleType] -> [CExtDecl]
-sumTypeDecl = fmap (CDeclExt . taggedUnionStruct)
+prodSumTypeDecl :: [ASingleType] -> [CExtDecl]
+prodSumTypeDecl = fmap (CDeclExt . taggedUnionStruct)
 
 anoyValueUnion :: SingleType a -> CDecl
 anoyValueUnion s@(UnionSingleType a b) =
   anoyUnion "value" [("left", stypeToTypeSpec a), ("right", stypeToTypeSpec b)]
 
 taggedUnionStruct :: ASingleType -> CDecl
-taggedUnionStruct (ASingleType stype) =
+taggedUnionStruct (ASingleType stype@(UnionSingleType a b)) =
   csu2 CStructTag (show stype) [labelField, anoyValueUnion stype]
+taggedUnionStruct (ASingleType s@(ProductSingleType a b)) = csu2
+  CStructTag
+  (show s)
+  [ CDecl [CTypeSpec $ stypeToTypeSpec a]
+          [(Just $ fromString "fst", Nothing, Nothing)]
+          undefNode
+  , CDecl [CTypeSpec $ stypeToTypeSpec b]
+          [(Just $ fromString "snd", Nothing, Nothing)]
+          undefNode
+  ]
 
 mainFuncStat :: CID -> [Nat] -> CStat
 mainFuncStat cid roles = CCompound

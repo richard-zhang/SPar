@@ -1,5 +1,5 @@
 module Main where
-import Lib
+import Spar
 
 main :: IO ()
 main = codeGenDebug cgts7
