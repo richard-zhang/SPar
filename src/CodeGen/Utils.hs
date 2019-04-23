@@ -104,6 +104,9 @@ decl ty name exp = CDecl [ty] [(Just name, flip CInitExpr undefNode `fmap` exp, 
 ptr :: CDeclr -> CDeclr
 ptr (CDeclr nm mods cstr attrs node) = CDeclr nm (CPtrDeclr [] undefNode : mods) cstr attrs node
 
+arr :: CDeclr -> CDeclr
+arr (CDeclr nm mods cstr attrs node) = CDeclr nm (CArrDeclr [] (CNoArrSize False) undefNode : mods) cstr attrs node
+
 fun :: [CDeclSpec] -> String -> [Maybe CExpr -> CDecl] -> CStat -> CFunDef
 fun specs name args body = annotatedFun specs name args [] body
 

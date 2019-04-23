@@ -58,7 +58,7 @@ extra-deps:
 # flags: {}
 ghc-options:
     # All packages
-    "$locals": -Wunused-imports
+    "$locals": -Wunused-imports -Wtyped-holes -Wincomplete-patterns
 
 # Extra package databases containing global packages
 # extra-package-dbs: []

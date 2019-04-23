@@ -107,6 +107,7 @@ stypeToCExpr (NumSingleType numType) v = numTypeToCExpr numType v
 stypeToCExpr LabelSingleType         v = case v of
   Le -> cVar "LEFT"
   Ri -> cVar "RIGHT"
+stypeToCExpr UnitSingleType _ = CConst (CIntConst (cInteger 0) undefNode)
 stypeToCExpr s@(SumSingleType a b) v = case v of
   Left  v1 -> helper "left" $ stypeToCExpr a v1
   Right v2 -> helper "right" $ stypeToCExpr b v2
@@ -117,12 +118,12 @@ stypeToCExpr s@(SumSingleType a b) v = case v of
     [ ([], initExp $ cVar $ fmap toUpper str)
     , ([], initList [([memberDesig str], initExp expr)])
     ]
-stypeToCExpr UnitSingleType _ = CConst (CIntConst (cInteger 0) undefNode)
 stypeToCExpr s@(ProductSingleType a b) v = defCompoundLit
   (show s)
   [ ([], initExp $ stypeToCExpr a (fst v))
   , ([], initExp $ stypeToCExpr b (snd v))
   ]
+stypeToCExpr s@(ListSingleType a) v = undefined
 
 sumCExp :: Either (Exp a) (Exp b) -> SingleType (Either a b) -> CExpr
 sumCExp exp s@(SumSingleType sa sb) = case exp of
