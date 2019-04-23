@@ -1,4 +1,9 @@
 # spar
+You need to install stack to start this project.
+```
+$ git clone https://github.com/Richard-zhang/SPar.git --recursive
+$ cd SPar && make cr
+```
 
 ## Questions
 1. How to build recursive data type without the mu? For example, List = \mu a. ('PSum ('PK ())  ('PProd ('PK elem) 'PId)) a
