@@ -1,12 +1,16 @@
 CC := gcc
-CFLAGS := -I/usr/local/include/chan/ -pedantic -std=c99 -Wall -Wextra -lpthread -lchan
+CFLAGS := -I ./chan/build/include/chan -pedantic -std=c99 -Wall -Wextra -lpthread -L ./chan/build/lib/ -lchan
 SRC := codegen
 FNAME := code
+DEP := chan/build/include/chan/*.h chan/build/lib/libchan.a
+
+$(DEP):
+	cd chan/ && $(MAKE) build
 
 $(SRC)/$(FNAME).c:
 	stack run
 
-build: $(SRC)/$(FNAME).c
+build: $(SRC)/$(FNAME).c $(DEP)
 	$(CC) $(SRC)/$(FNAME).c $(CFLAGS) -o $(SRC)/$(FNAME).o
 
 run: build
@@ -22,4 +26,4 @@ sr:
 cr: clean run 
 	@echo "Hello, World in the end"
 
-.PHONY: build clean run cr sr
+.PHONY: build clean run cr sr chan

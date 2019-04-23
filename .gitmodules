@@ -1,0 +1,3 @@
+[submodule "chan"]
+	path = chan
+	url = https://github.com/Richard-zhang/chan.git
