@@ -16,11 +16,10 @@ import           Foreign.Storable               ( Storable )
 data SingleType a where
     NumSingleType :: NumType a -> SingleType a
     LabelSingleType :: SingleType Label
-    UnionSingleType :: (Typeable a, Typeable b) => SingleType a -> SingleType b -> SingleType (Either a b)
+    SumSingleType :: (Typeable a, Typeable b) => SingleType a -> SingleType b -> SingleType (Either a b)
     UnitSingleType :: SingleType ()
     ProductSingleType :: (Typeable a, Typeable b) => SingleType a -> SingleType b -> SingleType (a, b)
     ListSingleType :: Typeable a => SingleType a -> SingleType [a]
-    FuncSingleType :: (Typeable a, Typeable b) => SingleType a -> SingleType b -> SingleType (a -> b)
 
 data ASingleType where
     ASingleType :: forall a. SingleType a -> ASingleType
@@ -30,19 +29,20 @@ equal (NumSingleType (IntegralNumType _)) (NumSingleType (IntegralNumType _)) =
     True
 equal (NumSingleType (FloatingNumType _)) (NumSingleType (FloatingNumType _)) =
     True
-equal LabelSingleType       LabelSingleType         = True
-equal (UnionSingleType a b) (UnionSingleType a' b') = equal a a' && equal b b'
-equal (ProductSingleType a b) (UnionSingleType a' b') =
-    equal a a' && equal b b'
-equal UnitSingleType UnitSingleType = True
-equal _              _              = False
+equal LabelSingleType         LabelSingleType       = True
+equal (SumSingleType     a b) (SumSingleType a' b') = equal a a' && equal b b'
+equal (ProductSingleType a b) (SumSingleType a' b') = equal a a' && equal b b'
+equal UnitSingleType          UnitSingleType        = True
+equal (ListSingleType a)      (ListSingleType b)    = a `equal` b
+equal _                       _                     = False
 
 sTypeHeight :: SingleType a -> Int
 sTypeHeight (NumSingleType _)       = 0
 sTypeHeight LabelSingleType         = 0
-sTypeHeight (UnionSingleType   a b) = 1 + max (sTypeHeight a) (sTypeHeight b)
+sTypeHeight (SumSingleType     a b) = 1 + max (sTypeHeight a) (sTypeHeight b)
 sTypeHeight (ProductSingleType a b) = 1 + max (sTypeHeight a) (sTypeHeight b)
 sTypeHeight (UnitSingleType       ) = 0
+sTypeHeight (ListSingleType a     ) = 1 + sTypeHeight a
 
 compareSingleType :: SingleType a -> SingleType b -> Ordering
 compareSingleType a b | a `equal` b = EQ
@@ -51,10 +51,11 @@ compareSingleType a b | a `equal` b = EQ
 instance Show (SingleType a) where
     show (NumSingleType (IntegralNumType _)) = "int"
     show (NumSingleType (FloatingNumType _)) = "float"
-    show (UnionSingleType a b) = intercalate "_" ["Sum", show a, show b]
-    show (ProductSingleType a b) = intercalate "_" ["Prod", show a, show b]
     show UnitSingleType = "unit"
     show LabelSingleType = "Label"
+    show (SumSingleType a b) = intercalate "_" ["Sum", show a, show b]
+    show (ProductSingleType a b) = intercalate "_" ["Prod", show a, show b]
+    show (ListSingleType a) = intercalate "_" ["List", show a]
 
 toASingleType :: SingleType a -> ASingleType
 toASingleType stype = ASingleType stype
@@ -119,7 +120,7 @@ singleTypeLabel :: SingleType Label
 singleTypeLabel = LabelSingleType
 
 singleTypeUnionInt :: SingleType (Either Int Int)
-singleTypeUnionInt = UnionSingleType singleTypeInt singleTypeInt
+singleTypeUnionInt = SumSingleType singleTypeInt singleTypeInt
 
 class Typeable a => Repr a where
     singleType :: SingleType a
@@ -134,7 +135,7 @@ instance Repr Float where
     singleType = NumSingleType numTypeFloat
 
 instance (Repr a, Repr b) => Repr (Either a b) where
-    singleType = UnionSingleType singleType singleType
+    singleType = SumSingleType singleType singleType
 
 instance (Repr a, Repr b) => Repr (a, b) where
     singleType = ProductSingleType singleType singleType
@@ -142,5 +143,5 @@ instance (Repr a, Repr b) => Repr (a, b) where
 instance Repr a => Repr [a] where
     singleType = ListSingleType singleType
 
-instance (Repr a, Repr b) => Repr (a -> b) where
-    singleType = FuncSingleType singleType singleType
+-- instance (Repr a, Repr b) => Repr (a -> b) where
+--     singleType = FuncSingleType singleType singleType

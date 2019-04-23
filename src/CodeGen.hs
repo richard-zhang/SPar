@@ -68,7 +68,7 @@ traverseToCodeGen
     => SingleType a
     -> [ProcessRT a]
     -> CodeGen m [(Nat, (Seq Instr))]
-traverseToCodeGen stype = mapM $ uncurry $ helper stype
+traverseToCodeGen stype ps = mapM (uncurry $ helper stype) ps
   where
     defaultContext = ExtraContext { ruleForPureCg = RReturn }
 
@@ -79,6 +79,7 @@ traverseToCodeGen stype = mapM $ uncurry $ helper stype
     helper singType process role =
         fmap (role, ) $ helper_ singType process role defaultContext
 
+    -- TODO very inefficient way to update data struct collects update on every send, select and pure
     helper_
         :: MonadIO m
         => SingleType a
@@ -86,12 +87,14 @@ traverseToCodeGen stype = mapM $ uncurry $ helper stype
         -> Nat
         -> ExtraContext
         -> CodeGen m (Seq Instr)
-    helper_ stype (Pure (exp :: Core a)) _ cxt@ExtraContext {..} =
+    helper_ stype (Pure (exp :: Core a)) _ cxt@ExtraContext {..} = do
+        updateDataStructCollect stype
         return $ case ruleForPureCg of
             RReturn         -> Seq.singleton (CEnd stype (Exp exp stype))
             RAssign varName -> Seq.singleton (CAssgn varName $ Exp exp stype)
             RIgnore         -> Seq.empty
     helper_ stype (Free (Send' receiver (exp :: Core a) next)) role cxt = do
+        updateDataStructCollect (singleType :: SingleType a)
         let chanKey = ChanKey { chanCreator = role, chanDestroyer = receiver }
         cid <- getChannelAndUpdateChanTable2 chanKey role
         let chan = Channel cid (singleType :: SingleType a)
@@ -163,6 +166,7 @@ traverseToCodeGen stype = mapM $ uncurry $ helper stype
             return (instrs Seq.>< restOfInstrs)
     helper_ stype (Free (Select' receiver (exp :: Core (Either a b)) left right next)) role cxt
         = do
+            updateDataStructCollect (singleType :: SingleType (Either a b))
             varEitherName <- freshVarName
             let chanKey =
                     ChanKey { chanCreator = role, chanDestroyer = receiver }
@@ -178,7 +182,6 @@ traverseToCodeGen stype = mapM $ uncurry $ helper stype
                 $ updateIgnore cxt
             rightSeqs <- helper_ singleType (right varRight) role
                 $ updateIgnore cxt
-            updateSumTypeCollect (singleType :: SingleType (Either a b))
             let
                 instrs = Seq.fromList
                     [ CDecla varEitherName
@@ -199,6 +202,7 @@ traverseToCodeGen stype = mapM $ uncurry $ helper stype
             return (instrs Seq.>< restOfInstrs)
     helper_ stype (Free (SelectMult' receivers (exp :: Core (Either a b)) left right next)) role cxt
         = do
+            updateDataStructCollect (singleType :: SingleType (Either a b))
             varEitherName <- freshVarName
             varLabelName  <- freshVarName
             let varLabel = Var $ fromIntegral varLabelName :: Core Label
@@ -216,7 +220,6 @@ traverseToCodeGen stype = mapM $ uncurry $ helper stype
                 $ updateIgnore cxt
             rightSeqs <- helper_ singleType (right varRight) role
                 $ updateIgnore cxt
-            updateSumTypeCollect (singleType :: SingleType (Either a b))
             let
                 instrs =
                     Seq.fromList

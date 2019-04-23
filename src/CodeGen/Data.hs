@@ -107,7 +107,7 @@ stypeToCExpr (NumSingleType numType) v = numTypeToCExpr numType v
 stypeToCExpr LabelSingleType         v = case v of
   Le -> cVar "LEFT"
   Ri -> cVar "RIGHT"
-stypeToCExpr s@(UnionSingleType a b) v = case v of
+stypeToCExpr s@(SumSingleType a b) v = case v of
   Left  v1 -> helper "left" $ stypeToCExpr a v1
   Right v2 -> helper "right" $ stypeToCExpr b v2
  where
@@ -125,7 +125,7 @@ stypeToCExpr s@(ProductSingleType a b) v = defCompoundLit
   ]
 
 sumCExp :: Either (Exp a) (Exp b) -> SingleType (Either a b) -> CExpr
-sumCExp exp s@(UnionSingleType sa sb) = case exp of
+sumCExp exp s@(SumSingleType sa sb) = case exp of
   Left expL -> defCompoundLit
     (show s)
     [ ([], initExp $ cVar "LEFT")
@@ -143,10 +143,10 @@ productCExp a b s@(ProductSingleType sa sb) = defCompoundLit
   [([], initExp $ convertToCExpr a), ([], initExp $ convertToCExpr b)]
 
 getLeftSumType :: SingleType (Either a b) -> SingleType a
-getLeftSumType (UnionSingleType sa sb) = sa
+getLeftSumType (SumSingleType sa sb) = sa
 
 getRightSumType :: SingleType (Either a b) -> SingleType b
-getRightSumType (UnionSingleType sa sb) = sb
+getRightSumType (SumSingleType sa sb) = sb
 
 getLeftProdType :: SingleType (a, b) -> SingleType a
 getLeftProdType (ProductSingleType a b) = a
@@ -235,7 +235,7 @@ stypeToTypeSpec stype = case stype of
   (NumSingleType (FloatingNumType _)) -> CFloatType undefNode
   UnitSingleType                      -> CIntType undefNode
   LabelSingleType                     -> idSpec "Label"
-  _                                   -> idSpec $ show stype
+  _                                   -> idSpec $ show stype -- include product type, sum type and list type and possibly recursive type
 
 stypeToCDecl :: SingleType a -> Int -> CDecl
 stypeToCDecl (NumSingleType (IntegralNumType (TypeInt _))) x =
@@ -243,14 +243,12 @@ stypeToCDecl (NumSingleType (IntegralNumType (TypeInt _))) x =
 stypeToCDecl (NumSingleType (FloatingNumType (TypeFloat _))) x =
   decl floatTy (cDeclr (varName_ x)) Nothing
 stypeToCDecl LabelSingleType x = decl labelTy (cDeclr (varName_ x)) Nothing
-stypeToCDecl UnitSingleType  x = decl intTy (cDeclr (varName_ x)) Nothing
-stypeToCDecl s@(UnionSingleType _ _) x =
-  decl (sumOrProductTy s) (cDeclr (varName_ x)) Nothing
-stypeToCDecl s@(ProductSingleType _ _) x =
-  decl (sumOrProductTy s) (cDeclr (varName_ x)) Nothing
+stypeToCDecl UnitSingleType x = decl intTy (cDeclr (varName_ x)) Nothing
+--- include product type, sum type and list type and possibly recursive type
+stypeToCDecl s x = decl (compoundTy s) (cDeclr (varName_ x)) Nothing
 
-sumOrProductTy :: SingleType a -> CDeclSpec
-sumOrProductTy a = CTypeSpec $ stypeToTypeSpec a
+compoundTy :: SingleType a -> CDeclSpec
+compoundTy a = CTypeSpec $ stypeToTypeSpec a
 
 labelTy :: CDeclSpec
 labelTy = defTy "Label"
@@ -294,16 +292,18 @@ labelField = CDecl [defTy "Label"]
                    undefNode
 
 prodSumTypeDecl :: [ASingleType] -> [CExtDecl]
-prodSumTypeDecl = fmap (CDeclExt . taggedUnionStruct)
+prodSumTypeDecl = fmap (CDeclExt . dataStructDecl)
 
-anoyValueUnion :: SingleType a -> CDecl
-anoyValueUnion s@(UnionSingleType a b) =
-  anoyUnion "value" [("left", stypeToTypeSpec a), ("right", stypeToTypeSpec b)]
-
-taggedUnionStruct :: ASingleType -> CDecl
-taggedUnionStruct (ASingleType stype@(UnionSingleType a b)) =
-  csu2 CStructTag (show stype) [labelField, anoyValueUnion stype]
-taggedUnionStruct (ASingleType s@(ProductSingleType a b)) = csu2
+dataStructDecl :: ASingleType -> CDecl
+dataStructDecl (ASingleType stype@(SumSingleType a b)) = csu2
+  CStructTag
+  (show stype)
+  [labelField, anoyValueUnion]
+ where
+  anoyValueUnion = anoyUnion
+    "value"
+    [("left", stypeToTypeSpec a), ("right", stypeToTypeSpec b)]
+dataStructDecl (ASingleType s@(ProductSingleType a b)) = csu2
   CStructTag
   (show s)
   [ CDecl [CTypeSpec $ stypeToTypeSpec a]
@@ -313,6 +313,10 @@ taggedUnionStruct (ASingleType s@(ProductSingleType a b)) = csu2
           [(Just $ fromString "snd", Nothing, Nothing)]
           undefNode
   ]
+dataStructDecl (ASingleType s@(ListSingleType stype)) = CDecl
+  [CStorageSpec $ CTypedef undefNode, CTypeSpec $ stypeToTypeSpec stype]
+  [(Just $ ptr $ fromString $ show s, Nothing, Nothing)]
+  undefNode
 
 mainFuncStat :: CID -> [Nat] -> CStat
 mainFuncStat cid roles = CCompound

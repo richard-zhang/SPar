@@ -28,7 +28,7 @@ data CodeGenState = CodeGenState
     flagTable :: Map ChanKey Nat, -- flag to indiciate which process is encountered first in the code generation
     varNext   :: Int,
     chanNext  :: CID,
-    sumTypeCollect :: Set ASingleType,
+    dataStructCollect :: Set ASingleType,
     newChanTable :: Map ChanKey CID
   }
 
@@ -58,18 +58,18 @@ codeGenCombined instrs state = CTranslUnit
     cid          = chanNext state
     channelDecls = chanDecls cid
     roles        = fmap fst instrs
-    sumTypeDecls = prodSumTypeDecl $ Set.toList $ sumTypeCollect state
+    sumTypeDecls = prodSumTypeDecl $ Set.toList $ dataStructCollect state
     main         = [CFDefExt $ mainFunc cid roles]
     funcsRt      = fmap (CFDefExt . uncurry instrToFuncRt) instrs
     funcsCaller  = fmap (CFDefExt . pthreadFunc . fst) instrs
 
 initCodeGenState :: CodeGenState
-initCodeGenState = CodeGenState { chanTable      = Map.empty
-                                , flagTable      = Map.empty
-                                , varNext        = 0
-                                , chanNext       = 1
-                                , sumTypeCollect = Set.empty
-                                , newChanTable   = Map.empty
+initCodeGenState = CodeGenState { chanTable         = Map.empty
+                                , flagTable         = Map.empty
+                                , varNext           = 0
+                                , chanNext          = 1
+                                , dataStructCollect = Set.empty
+                                , newChanTable      = Map.empty
                                 }
 
 freshChanName :: Monad m => CodeGen m CID
@@ -147,18 +147,23 @@ getChannelAndUpdateChanTable2 key _ = do
         Just cid -> return cid
         Nothing  -> createAndAddChannel2 key
 
-updateSumTypeCollect :: Monad m => SingleType a -> CodeGen m ()
-updateSumTypeCollect stype@(UnionSingleType (a :: SingleType a) (b :: SingleType
-        b))
-    = (state $ \s@CodeGenState {..} ->
-          ( ()
-          , s { sumTypeCollect = Set.insert (toASingleType stype) sumTypeCollect
-              }
-          )
-      )
-        >> updateSumTypeCollect a
-        >> updateSumTypeCollect b
-updateSumTypeCollect _ = return ()
+updateDataStructCollect :: Monad m => SingleType a -> CodeGen m ()
+updateDataStructCollect stype = case stype of
+    (SumSingleType a b) ->
+        update >> updateDataStructCollect a >> updateDataStructCollect b
+    (ProductSingleType a b) ->
+        update >> updateDataStructCollect a >> updateDataStructCollect b
+    (ListSingleType a) -> update >> updateDataStructCollect a
+    _                  -> return ()
+  where
+    update :: Monad m => CodeGen m ()
+    update = state $ \s@CodeGenState {..} ->
+        ( ()
+        , s
+            { dataStructCollect = Set.insert (toASingleType stype)
+                                             dataStructCollect
+            }
+        )
 
 -- debugging purpose
 getSeqChan :: Monad m => ChanKey -> CodeGen m (Seq CID)
