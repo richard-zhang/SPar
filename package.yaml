@@ -1,8 +1,8 @@
 library:
   source-dirs: src
-  ghc-options:
+  # ghc-options:
   # - -j4 +RTS -A32m -RTS
-  - -O2
+  # - -O2
   # - -Wall -Werror
   # -  -Wincomplete-patterns
 tests:

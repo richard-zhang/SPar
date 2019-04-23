@@ -48,9 +48,9 @@ instrToCBlock :: Instr -> CBlockItem
 instrToCBlock (CInitChan   chan) = liftEToB $ (chanName chan) <-- chanInit
 instrToCBlock (CDeleteChan chan) = liftEToB $ chanDispose (chanName chan)
 instrToCBlock (CSend chan expr) =
-  liftEToB $ chanSendInt (chanName chan) $ convertToCExpr expr
+  liftEToB $ chanActionGeneral True (chanName chan) expr
 instrToCBlock (CRecv chan expr) =
-  liftEToB $ chanRecvInt (chanName chan) $ pre Addr $ convertToCExpr expr
+  liftEToB $ chanActionGeneral False (chanName chan) expr
 instrToCBlock (CDecla var stype) = CBlockDecl $ stypeToCDecl stype var
 instrToCBlock (CAssgn x value) =
   liftEToB $ (varName x) <-- convertToCExpr value
@@ -107,7 +107,7 @@ stypeToCExpr (NumSingleType numType) v = numTypeToCExpr numType v
 stypeToCExpr LabelSingleType         v = case v of
   Le -> cVar "LEFT"
   Ri -> cVar "RIGHT"
-stypeToCExpr UnitSingleType _ = CConst (CIntConst (cInteger 0) undefNode)
+stypeToCExpr UnitSingleType        _ = CConst (CIntConst (cInteger 0) undefNode)
 stypeToCExpr s@(SumSingleType a b) v = case v of
   Left  v1 -> helper "left" $ stypeToCExpr a v1
   Right v2 -> helper "right" $ stypeToCExpr b v2
@@ -123,7 +123,27 @@ stypeToCExpr s@(ProductSingleType a b) v = defCompoundLit
   [ ([], initExp $ stypeToCExpr a (fst v))
   , ([], initExp $ stypeToCExpr b (snd v))
   ]
-stypeToCExpr s@(ListSingleType a) v = undefined
+stypeToCExpr s@(ListSingleType a) v = CStatExpr combStat undefNode
+ where
+    -- statment = fmap (\x y -> (("tmp" !: x) <-- stypeToCExpr s y)) (zip ([0..] :: [Int]) v)
+  comb       = zip ([0 ..] :: [Int]) v
+  exprs      = fmap (\(x, y) -> (("tmp" !: x) <-- (stypeToCExpr a y))) comb
+  mallocExpr = castTy
+    ( malloc
+    $ ((fromIntegral $ length v) * (sizeOfDecl $ ty2Decl (stypeToTypeSpec a)))
+    )
+    (idSpec $ show s)
+  statements =
+    CBlockDecl
+        (decl (CTypeSpec $ stypeToTypeSpec s)
+              (fromString "tmp")
+              (Just mallocExpr)
+        )
+      : (  fmap CBlockStmt
+        $  fmap (\x -> CExpr (Just x) undefNode) exprs
+        ++ [CExpr (Just $ cVar "tmp") undefNode]
+        )
+  combStat = CCompound [] statements undefNode
 
 sumCExp :: Either (Exp a) (Exp b) -> SingleType (Either a b) -> CExpr
 sumCExp exp s@(SumSingleType sa sb) = case exp of
@@ -193,14 +213,29 @@ chanInit = (cVar "chan_init") # [cInt 1]
 chanDispose :: CExpr -> CExpr
 chanDispose a = cVar "chan_dispose" # [a]
 
-chanSendInt :: CExpr -> CExpr -> CExpr
-chanSendInt a b = cVar "chan_send_int" # [a, b]
+chanActionGeneral :: Bool -> CExpr -> Exp a -> CExpr
+chanActionGeneral isSend channel exp@(Exp b stype) = case stype of
+  (NumSingleType (IntegralNumType _)) ->
+    cVar (intercalate "_" ["chan", action, show stype])
+      # [channel, cexpr]
+  (NumSingleType (FloatingNumType _)) ->
+    cVar (intercalate "_" ["chan", action, "double"])
+      # [channel, cexpr]
+  (LabelSingleType) ->
+    cVar (intercalate "_" ["chan", action, "int"])
+      # [channel, cexpr]
+  (UnitSingleType) ->
+    cVar (intercalate "_" ["chan", action, "int"])
+      # [channel, cexpr]
+  (ListSingleType stype) ->
+    cVar (intercalate "_" ["chan", action]) # [channel, cexpr]
+  _ ->
+    cVar (intercalate "_" ["chan", action, "int"])
+      # [channel, cexpr]
+  where 
+    action = if isSend then "send" else "recv"
+    cexpr = if isSend then convertToCExpr exp else pre Addr $ convertToCExpr exp
 
-chanRecvInt :: CExpr -> CExpr -> CExpr
-chanRecvInt a b = cVar "chan_recv_int" # [a, b]
-
--- pthread_t th;
--- pthread_create(&th, NULL, ping, NULL);
 chanName__ :: CID -> String
 chanName__ = ("c" ++) . show
 

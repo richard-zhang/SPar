@@ -284,3 +284,11 @@ cgs = select' zero (Lit (Left () :: Either () ())) (\_ -> cgt1) (\_ -> cgt0')
 cgts1 = [(cgt0, zero), (cgt1, one)]
 cgts1' = [(ignoreOutput cgt0, zero), (ignoreOutput cgt1, one)]
 cgts2 = [(cgb, zero), (cgs, one)]
+
+procList :: ProcRT [Int]
+procList = send' one (Lit [1,2,3,4])
+
+procListRecv :: ProcRT [Int]
+procListRecv = recv' zero 
+
+cgts9 = [(procList, zero), (procListRecv, one)]
