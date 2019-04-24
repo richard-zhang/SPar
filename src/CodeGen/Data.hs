@@ -13,10 +13,23 @@ import           Data.String
 import           Data.Type.Natural              ( Nat )
 import           Data.Typeable
 import           Language.C
+import           Data.IORef
+import           System.IO.Unsafe
 
 import           CodeGen.Type
 import           CodeGen.Utils
 import           Language.Poly.Core
+
+---- HACK ZONE UNSAFE
+isDebug :: IORef Bool
+isDebug = unsafePerformIO (newIORef False)
+
+makeTrue :: IO ()
+makeTrue = writeIORef isDebug True
+
+getDebugFlag :: Bool
+getDebugFlag = unsafePerformIO $ readIORef isDebug
+---- UNSAFE HACK ZONE
 
 type CID = Int
 
@@ -215,26 +228,22 @@ chanDispose a = cVar "chan_dispose" # [a]
 
 chanActionGeneral :: Bool -> CExpr -> Exp a -> CExpr
 chanActionGeneral isSend channel exp@(Exp b stype) = case stype of
-  (NumSingleType (IntegralNumType _)) ->
-    cVar (intercalate "_" ["chan", action, show stype])
-      # [channel, cexpr]
-  (NumSingleType (FloatingNumType _)) ->
-    cVar (intercalate "_" ["chan", action, "double"])
-      # [channel, cexpr]
-  (LabelSingleType) ->
-    cVar (intercalate "_" ["chan", action, "int"])
-      # [channel, cexpr]
-  (UnitSingleType) ->
-    cVar (intercalate "_" ["chan", action, "int"])
-      # [channel, cexpr]
-  (ListSingleType stype) ->
-    cVar (intercalate "_" ["chan", action]) # [channel, cexpr]
-  _ ->
-    cVar (intercalate "_" ["chan", action, "int"])
-      # [channel, cexpr]
-  where 
-    action = if isSend then "send" else "recv"
-    cexpr = if isSend then convertToCExpr exp else pre Addr $ convertToCExpr exp
+  (NumSingleType (IntegralNumType _)) -> f "int"
+  (NumSingleType (FloatingNumType _)) -> f "double"
+  (LabelSingleType                  ) -> f "int"
+  (UnitSingleType                   ) -> f "int"
+  (ListSingleType _                 ) -> f ""
+  (SumSingleType     _ _            ) -> buf_action
+  (ProductSingleType _ _            ) -> buf_action
+ where
+  action  = if isSend then "send" else "recv"
+  ptrExpr = pre Addr $ convertToCExpr exp
+  cexpr   = if isSend then convertToCExpr exp else ptrExpr
+  f []     = cVar (intercalate "_" ["chan", action]) # [channel, cexpr]
+  f prefix = cVar (intercalate "_" ["chan", action, prefix]) # [channel, cexpr]
+  buf_action =
+    cVar (intercalate "_" ["chan", action, "buf"])
+      # [channel, ptrExpr, sizeOfDecl $ ty2Decl $ stypeToTypeSpec stype]
 
 chanName__ :: CID -> String
 chanName__ = ("c" ++) . show

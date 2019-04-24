@@ -37,12 +37,12 @@ instance MonadIO Identity where
     liftIO = Identity . unsafePerformIO
 
 -- error "the list of processes are not dual"
-codeGenDebug :: Repr a => [ProcessRT a] -> IO ()
-codeGenDebug xs
-    | otherwise = codeGen
-    | --- | checkDual xs = codeGen
-      otherwise = putStrLn "List of processes are not dual" >> codeGen
+-- | checkDual xs = codeGen
+codeGenDebug :: Repr a => Bool -> [ProcessRT a] -> IO ()
+codeGenDebug isDebug xs | isDebug   = makeTrue >> codeGen
+                        | otherwise = codeGen
   where
+    isDual = checkDual xs
     codeGen = writeFile "codegen/code.c" (headers ++ source ++ "\n")
     source  = (show . pretty . testCodeGen) xs
     headers = concatMap (\x -> "#include<" ++ x ++ ".h>\n")
@@ -50,7 +50,7 @@ codeGenDebug xs
 
 codeGenBuildRun :: Repr a => [ProcessRT a] -> IO Bool
 codeGenBuildRun xs = do
-    codeGenDebug xs
+    codeGenDebug False xs
     (rc, _, _) <- readCreateProcessWithExitCode (shell "make build") []
     case rc of
         ExitSuccess -> do

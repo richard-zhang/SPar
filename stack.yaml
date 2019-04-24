@@ -47,8 +47,8 @@ extra-deps:
   commit: 089060c
 - git: https://github.com/dcastrop/IVector
   commit: f5d10db
-- git: https://github.com/Richard-zhang/language-c.git
-  commit: 2c073ab4b27b0d9193a2a9fdf64d79e0763cf66b
+# - git: https://github.com/Richard-zhang/language-c.git
+#   commit: 2c073ab4b27b0d9193a2a9fdf64d79e0763cf66b
 # Dependency packages to be pulled from upstream that are not in the resolver
 # using the same syntax as the packages field.
 # (e.g., acme-missiles-0.3)

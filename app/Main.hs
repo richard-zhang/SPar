@@ -2,4 +2,4 @@ module Main where
 import Spar
 
 main :: IO ()
-main = codeGenDebug cgts9
+main = codeGenDebug True cgts1
