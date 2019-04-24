@@ -11,8 +11,6 @@ import           Data.Sequence                  ( Seq )
 import qualified Data.Sequence                 as Seq
 import           Data.Type.Natural
 import           Language.C
-import           Language.C.Pretty
-import           System.IO.Unsafe
 import           System.Process
 import           System.Exit
 
@@ -33,17 +31,15 @@ data CgRule where
     RAssign :: Int -> CgRule -- Assign value to the variable
     RIgnore :: CgRule -- ignore the result 
 
-instance MonadIO Identity where
-    liftIO = Identity . unsafePerformIO
-
 -- error "the list of processes are not dual"
 -- | checkDual xs = codeGen
 codeGenDebug :: Repr a => Bool -> [ProcessRT a] -> IO ()
-codeGenDebug isDebug xs | isDebug   = makeTrue >> codeGen
-                        | otherwise = codeGen
+codeGenDebug isDebug xs | True || isDual = codeGen
+                        | otherwise = putStrLn "processes not dual" >> codeGen
   where
-    isDual = checkDual xs
-    codeGen = writeFile "codegen/code.c" (headers ++ source ++ "\n")
+    isDual  = checkDual xs
+    codeGen = (if isDebug then makeTrue else return ())
+        >> writeFile "codegen/code.c" (headers ++ source ++ "\n")
     source  = (show . pretty . testCodeGen) xs
     headers = concatMap (\x -> "#include<" ++ x ++ ".h>\n")
                         ["stdint", "stdio", "stdlib", "chan", "pthread"]

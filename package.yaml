@@ -1,9 +1,9 @@
 library:
   source-dirs: src
-  # ghc-options:
+  ghc-options:
   # - -j4 +RTS -A32m -RTS
   # - -O2
-  # - -Wall -Werror
+  - -Wall
   # -  -Wincomplete-patterns
 tests:
   spar-test:
@@ -36,6 +36,7 @@ dependencies:
 - type-natural >= 0.8 && < 0.9
 - language-c >= 0.8 && < 0.9
 - mtl >= 2.2 && < 2.3
+- deepseq >= 1.4 && < 1.5
 name: spar
 version: 0.1.0.0
 extra-source-files:

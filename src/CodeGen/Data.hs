@@ -56,7 +56,7 @@ instrToCBlock (CInitChan   chan) = liftEToB $ (chanName chan) <-- chanInit
 instrToCBlock (CDeleteChan chan) = liftEToB $ chanDispose (chanName chan)
 instrToCBlock (CSend chan expr) =
   liftEToB $ chanActionGeneral True (chanName chan) expr
-instrToCBlock (CRecv chan expr) = tryAddDebugStat
+instrToCBlock (CRecv chan expr) = if getDebugFlag then tryAddDebugStat else recvStat
  where
   recvStat        = liftEToB $ chanActionGeneral False (chanName chan) expr
   debugStat       = liftEToB $ printDebug expr
@@ -392,12 +392,12 @@ labelField = CDecl [defTy "Label"]
                    undefNode
 
 ---- HACK ZONE UNSAFE
-isDebug :: IORef Bool
-isDebug = unsafePerformIO (newIORef False)
+debugFlag :: IORef Bool
+debugFlag = unsafePerformIO (newIORef False)
 
 makeTrue :: IO ()
-makeTrue = writeIORef isDebug True
+makeTrue = writeIORef debugFlag True
 
 getDebugFlag :: Bool
-getDebugFlag = unsafePerformIO $ readIORef isDebug
+getDebugFlag = unsafePerformIO $ readIORef debugFlag
 ---- UNSAFE HACK ZONE
