@@ -353,7 +353,7 @@ runPipe' pipe val = toProcessRT $ Map.insertWith bind key procVal (env pipe)
   procVal  = callAProcRTFunc procFunc val
   toProcessRT map =
     let f (AProcRT ty proc) = ignoreOutput proc
-    in  swap . fmap f <$> Map.toList map
+    in  (swap . fmap f) <$> Map.toList map
 
 -- utility functions
 getAllRoles :: Pipe a b -> Set Nat

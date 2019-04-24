@@ -9,6 +9,7 @@ $(DEP):
 
 $(SRC)/$(FNAME).c:
 	stack run
+	cp codegen/code.c ../clab
 
 build: $(SRC)/$(FNAME).c $(DEP)
 	$(CC) $(SRC)/$(FNAME).c $(CFLAGS) -o $(SRC)/$(FNAME).o

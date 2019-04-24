@@ -6,21 +6,26 @@
 {-# LANGUAGE TypeInType          #-}
 module RtDef where
 
-import Control.Monad.Free
-import qualified Control.Monad.Indexed.Free as F
-import Data.Constraint
-import Data.Kind
-import Data.Singletons
-import Data.Singletons.Decide
-import Data.Type.Natural hiding (type (*), S)
-import qualified Data.Typeable as T
+import           Control.Monad.Free
+import qualified Control.Monad.Indexed.Free    as F
+import           Data.Constraint
+import           Data.Kind
+import           Data.Singletons
+import           Data.Singletons.Decide
+import           Data.Type.Natural       hiding ( type (*)
+                                                , S
+                                                )
+import qualified Data.Typeable                 as T
 
-import Def hiding (return, (>>), (>>=))
-import Language.Poly.Core
-import Type
-import Type.Reflection
-import TypeValue
-import CodeGen.Type
+import           Def                     hiding ( return
+                                                , (>>)
+                                                , (>>=)
+                                                )
+import           Language.Poly.Core
+import           Type
+import           Type.Reflection
+import           TypeValue
+import           CodeGen.Type
 
 type ProcessRT a = (ProcRT a, Nat)
 
@@ -31,22 +36,24 @@ data ProcRTF next where
     Branch' :: (Serialise c) => Nat -> ProcRT c -> ProcRT c -> next -> ProcRTF next
 
     SelectMult' :: (Serialise a, Serialise b, Serialise c) => [Nat] -> Core (Either a b) -> (Core a -> ProcRT c) -> (Core b -> ProcRT c) -> next -> ProcRTF next
-    BranchCont' :: (Serialise c) => Nat -> ProcRT c -> ProcRT c -> (Core c -> next) -> ProcRTF next 
+    BranchCont' :: (Serialise c) => Nat -> ProcRT c -> ProcRT c -> (Core c -> next) -> ProcRTF next
 
     Rec' :: Integer -> next -> ProcRTF next
     Mu' :: Integer -> ProcRTF a
 
 instance Functor ProcRTF where
-    fmap f (Send' r v n)               = Send' r v $ f n
-    fmap f (Recv' r cont)              = Recv' r (f . cont)
+    fmap f (Send' r v n              ) = Send' r v $ f n
+    fmap f (Recv' r cont             ) = Recv' r (f . cont)
     fmap f (Select' r v cont1 cont2 n) = Select' r v cont1 cont2 (f n)
-    fmap f (Branch' r left right n)    = Branch' r left right (f n)
+    fmap f (Branch' r left right n   ) = Branch' r left right (f n)
 
-    fmap f (SelectMult' rs v cont1 cont2 n) = SelectMult' rs v cont1 cont2 (f n)
-    fmap f (BranchCont' r left right cont) = BranchCont' r left right (f . cont)
+    fmap f (SelectMult' rs v cont1 cont2 n) =
+        SelectMult' rs v cont1 cont2 (f n)
+    fmap f (BranchCont' r left right cont) =
+        BranchCont' r left right (f . cont)
 
-    fmap f (Rec' var n)                = Rec' var (f n)
-    fmap f (Mu' var)                   = Mu' var
+    fmap f (Rec' var n) = Rec' var (f n)
+    fmap f (Mu' var   ) = Mu' var
 
 -- type ProcRT a = Free ProcRTF (Core a)
 type ProcRT a = ProcRT' (Core a)
@@ -76,14 +83,15 @@ select' role var cont1 cont2 = liftF $ Select' role var cont1 cont2 (Lit ())
 branch' :: Serialise c => Nat -> ProcRT c -> ProcRT c -> ProcRT ()
 branch' role left right = liftF $ Branch' role left right (Lit ())
 
-selectMulti' 
+selectMulti'
     :: (Serialise a, Serialise b, Serialise c)
     => [Nat]
     -> Core (Either a b)
     -> (Core a -> ProcRT c)
     -> (Core b -> ProcRT c)
     -> ProcRT ()
-selectMulti' rs var cont1 cont2 = liftF $ SelectMult' rs var cont1 cont2 (Lit ())
+selectMulti' rs var cont1 cont2 =
+    liftF $ SelectMult' rs var cont1 cont2 (Lit ())
 
 branchCont' :: Serialise c => Nat -> ProcRT c -> ProcRT c -> ProcRT c
 branchCont' role left right = liftF $ BranchCont' role left right id
@@ -108,8 +116,8 @@ convert n (Free (Select' r v cont1 cont2 next)) = Free
     )
 convert n (Free (Branch' r left right next)) =
     Free (B r (convert 0 left) (convert 0 right) (convert n next))
-convert n (Free (BranchCont' r left right cont)) =
-    Free (B r (convert 0 left) (convert 0 right) $ convert (n + 1) (cont $ Var n))
+convert n (Free (BranchCont' r left right cont)) = Free
+    (B r (convert 0 left) (convert 0 right) $ convert (n + 1) (cont $ Var n))
 
 eraseSessionInfo' :: Proc' i j a -> ProcRT a
 eraseSessionInfo' (F.Pure v) = Pure v
@@ -140,10 +148,13 @@ convert2Normal :: PList xs -> [ProcessRT ()]
 convert2Normal PNil         = []
 convert2Normal (PCons p ps) = eraseSessionInfo p : convert2Normal ps
 
-type Proc'' (i :: SType * *) a = Proc' i ('Pure ()) a
+type Proc'' (i :: SType * *) a = Proc' i ( 'Pure ()) a
 
 withProcRT
-    :: Typeable a => ProcRT a -> (forall (n :: SType * *) . Sing n -> Proc n a -> r) -> r
+    :: Typeable a
+    => ProcRT a
+    -> (forall (n :: SType * *) . Sing n -> Proc n a -> r)
+    -> r
 withProcRT (Free (Send' n val next)) f = withProcRT next $ \info cont ->
     case toSing n of
         SomeSing role ->
@@ -161,7 +172,8 @@ data SomeProc a where
     SomeProc :: Sing n -> Proc n a -> SomeProc a
 
 typeInferWithRole :: Typeable a => ProcessRT a -> SomeTypingInfo
-typeInferWithRole (proc, role) = withSomeSing role (\r -> withProcRT proc (const . (SomeTypingInfo r)))
+typeInferWithRole (proc, role) =
+    withSomeSing role (\r -> withProcRT proc (const . (SomeTypingInfo r)))
 
 -- typeInferList :: Typeable a => [ProcessRT a] -> Bool
 -- typeInferList procs = allTrue $ fmap helper $ handShake $ map typeInferWithRole procs
@@ -184,10 +196,9 @@ t1 = do
 
 typeCheck :: Typeable a => ProcRT a -> Sing (n :: SType * *) -> Maybe (Sing n)
 typeCheck proc providedType = case typeInfer proc of
-    SomeSType inferedType ->
-        case providedType %~ inferedType of
-            Proved Refl -> Just providedType
-            _           -> Nothing
+    SomeSType inferedType -> case providedType %~ inferedType of
+        Proved Refl -> Just providedType
+        _           -> Nothing
 
 typeInfer :: Typeable a => ProcRT a -> SomeSType
 typeInfer proc = withProcRT proc (const . SomeSType)
@@ -230,21 +241,26 @@ good' = rec' 0 $ do
 
 cgts3 = [(good', zero), (good, one)]
 
-recTest = rec' 0 $ branch' zero 
-    (do 
+recTest = rec' 0 $ branch'
+    zero
+    (do
         send' zero (Lit 1 :: Core Int)
 --        send' zero (Lit 2 :: Core Int)
 --        send' zero (Lit 3 :: Core Int)
     )
     (send' zero (Lit 99 :: Core Int) >> mu' 0)
 
-recTest' = select' one (Lit (Right () :: Either () ()))
+recTest' = select'
+    one
+    (Lit (Right () :: Either () ()))
     (\_ -> return (Lit ()))
-    (\_ -> do 
+    (\_ -> do
         x :: Core Int <- recv' one
-        select' one (Lit (Left () :: Either () ()))
+        select'
+            one
+            (Lit (Left () :: Either () ()))
             (\_ -> do
-                y :: Core Int <- recv' one     
+                y :: Core Int <- recv' one
 --                z :: Core Int <- recv' one
 --                q :: Core Int <- recv' one
                 return (Lit ())
@@ -255,30 +271,78 @@ recTest' = select' one (Lit (Right () :: Either () ()))
 cgts4 = [(recTest', zero), (recTest, one)]
 
 -- zero
-branchCont = (branchCont' one (do y :: Core Int <- recv' one; return y) (do y :: Core Int <- recv' one; return y)) >>= (\x -> send' one x)
+branchCont =
+    (branchCont'
+            one
+            (do
+                y :: Core Int <- recv' one
+                return y
+            )
+            (do
+                y :: Core Int <- recv' one
+                return y
+            )
+        )
+        >>= (\x -> send' one x)
 -- one
-coBranchCont = ( select' zero (Lit (Left () :: Either () ()))
-    (\_ -> send' zero (Lit (3 :: Int)))
-    (\_ -> send' zero (Lit (5 :: Int)))
-    ) >>= (\_ -> recv' zero :: ProcRT Int)
+coBranchCont =
+    (select' zero
+             (Lit (Left () :: Either () ()))
+             (\_ -> send' zero (Lit (3 :: Int)))
+             (\_ -> send' zero (Lit (5 :: Int)))
+        )
+        >>= (\_ -> recv' zero :: ProcRT Int)
 cgts5 = [(branchCont, zero), (coBranchCont, one)]
 
 -- Select broadcast
-headProc = selectMulti' [one, two, three] (Lit (Left () :: Either () ())) (\_ -> return (Lit ())) (\_ -> return (Lit ()))
-oneProc = branch' zero (ignoreOutput $ do y :: Core Int <- recv' two; return y) (ignoreOutput $ do y :: Core Int <- recv' three; return y)
-twoProc = branch' zero (ignoreOutput $ do send' one (Lit (3 :: Int)); x :: Core Int <- recv' three; return x) (ignoreOutput $ return (Lit ()))
-threeProc = branch' zero (ignoreOutput $ do send' two (Lit (4 :: Int))) (ignoreOutput $ do send' one (Lit (3 :: Int)))
+headProc = selectMulti' [one, two, three]
+                        (Lit (Left () :: Either () ()))
+                        (\_ -> return (Lit ()))
+                        (\_ -> return (Lit ()))
+oneProc = branch'
+    zero
+    (ignoreOutput $ do
+        y :: Core Int <- recv' two
+        return y
+    )
+    (ignoreOutput $ do
+        y :: Core Int <- recv' three
+        return y
+    )
+twoProc = branch'
+    zero
+    (ignoreOutput $ do
+        send' one (Lit (3 :: Int))
+        x :: Core Int <- recv' three
+        return x
+    )
+    (ignoreOutput $ return (Lit ()))
+threeProc = branch'
+    zero
+    (ignoreOutput $ do
+        send' two (Lit (4 :: Int))
+    )
+    (ignoreOutput $ do
+        send' one (Lit (3 :: Int))
+    )
 cgts6 = [(headProc, zero), (oneProc, one), (twoProc, two), (threeProc, three)]
 
 -- test nested type
-nestedBranch = branch' one cgt0 cgt1' 
-nestedSelectOne = select' zero (Lit (Right (Left ()) :: Either () (Either () ()))) (\_ -> cgt1) (\_ -> cgt0')
-nestedSelectTwo = select' zero (Lit (Left () :: Either () (Either () ()))) (\_ -> cgt1) (\_ -> cgt0')
+nestedBranch = branch' one cgt0 cgt1'
+nestedSelectOne = select'
+    zero
+    (Lit (Right (Left ()) :: Either () (Either () ())))
+    (\_ -> cgt1)
+    (\_ -> cgt0')
+nestedSelectTwo = select' zero
+                          (Lit (Left () :: Either () (Either () ())))
+                          (\_ -> cgt1)
+                          (\_ -> cgt0')
 
 cgts7 = [(nestedBranch, zero), (nestedSelectOne, one)]
 cgts8 = [(nestedBranch, zero), (nestedSelectTwo, one)]
 
-cgb = branch' one cgt0 cgt1' 
+cgb = branch' one cgt0 cgt1'
 cgs = select' zero (Lit (Left () :: Either () ())) (\_ -> cgt1) (\_ -> cgt0')
 
 cgts1 = [(cgt0, zero), (cgt1, one)]
@@ -286,9 +350,26 @@ cgts1' = [(ignoreOutput cgt0, zero), (ignoreOutput cgt1, one)]
 cgts2 = [(cgb, zero), (cgs, one)]
 
 procList :: ProcRT [Int]
-procList = send' one (Lit [1,2,3,4])
+procList = send' one (Lit [1, 2, 3, 4])
 
 procListRecv :: ProcRT [Int]
-procListRecv = recv' zero 
+procListRecv = recv' zero
 
 cgts9 = [(procList, zero), (procListRecv, one)]
+
+cgts10 =
+    [ ((send' one (Pair (Lit 3) (Lit 4))) :: ProcRT (Int, Int), zero)
+    , ((recv' zero) :: ProcRT (Int, Int)                      , one)
+    ]
+
+cgts11 =
+    [ ( (send' one (Pair (Pair (Lit 2) (Lit 1)) (Lit 4))) :: ProcRT
+              ((Int, Int), Int)
+      , zero
+      )
+    , ((recv' zero) :: ProcRT ((Int, Int), Int), one)
+    ]
+--  cgts10 = 
+--     [   ((send' one (Pair (Lit 3) (Lit 4))) :: ProcRT (Either Int (Int, Int)) , zero), 
+--         ((recv' zero) :: ProcRT (Either Int (Int, Int)) , zero)
+--     ] 

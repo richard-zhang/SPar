@@ -55,8 +55,6 @@ type CC = Typeable
 -- instance (Bcc a, Bcc b) => Bcc (a, b)
 -- instance (Bcc a, Bcc b) => Bcc (Either a b)
 
-type Serialise a = (Repr a, Show a, Read a, Typeable a)
-
 class Show a => Value a where
 
 instance Show a => Value a where

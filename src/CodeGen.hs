@@ -90,7 +90,7 @@ traverseToCodeGen stype ps = mapM (uncurry $ helper stype) ps
     helper_ stype (Pure (exp :: Core a)) _ cxt@ExtraContext {..} = do
         updateDataStructCollect stype
         return $ case ruleForPureCg of
-            RReturn         -> Seq.singleton (CEnd stype (Exp exp stype))
+            RReturn         -> Seq.singleton (CEnd (Exp exp stype))
             RAssign varName -> Seq.singleton (CAssgn varName $ Exp exp stype)
             RIgnore         -> Seq.empty
     helper_ stype (Free (Send' receiver (exp :: Core a) next)) role cxt = do

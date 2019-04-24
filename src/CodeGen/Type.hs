@@ -5,12 +5,15 @@
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE RankNTypes                #-}
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE ConstraintKinds #-}
 module CodeGen.Type where
 
 import           Data.Bits
 import           Data.Typeable
 import           Data.List
 import           Foreign.Storable               ( Storable )
+
+type Serialise a = (Repr a, Show a, Read a, Typeable a)
 
 -- need to find a way to represent recursive single type 
 data SingleType a where
@@ -130,6 +133,9 @@ instance Repr () where
 
 instance Repr Int where
     singleType = singleTypeInt
+
+instance Repr Label where
+    singleType = LabelSingleType
 
 instance Repr Float where
     singleType = NumSingleType numTypeFloat

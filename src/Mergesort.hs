@@ -28,19 +28,19 @@ sort :: Core ([a] -> [a])
 sort = Prim "sort" undefined
 
 mergeSortBase :: Serialise a => Nat -> Nat -> Pipe [a] [a]
-mergeSortBase =
-    arr split >>>
-    (arr Inl
-        |||
-        (
-        (arr Fst >>> arr sort)
-           &&&
-        (arr Snd >>> arr sort)
-        >>>
-        arr Inr
-        )
-    ) >>>
-    arr merge
+mergeSortBase = arr split >>> arr merge
+    -- arr split >>>
+    -- (arr Inl
+    --     |||
+    --     (
+    --     (arr Fst >>> arr sort)
+    --        &&&
+    --     (arr Snd >>> arr sort)
+    --     >>>
+    --     arr Inr
+    --     )
+    -- ) >>>
+    -- arr merge
 
 mergeSort :: Serialise a => Int -> Nat -> Nat -> Pipe [a] [a]
 mergeSort 0 = mergeSortBase
@@ -57,3 +57,12 @@ mergeSort x =
         )
     ) >>>
     arr merge
+
+testMergeSort :: [ProcessRT ()]
+testMergeSort = runPipe mergeSortBase one twenty (Lit [1,2,4,3,2,1] :: Core [Int])
+
+testFunc :: Core (Int -> Int)
+testFunc = Prim "testing" undefined
+
+testArr :: [ProcessRT ()]
+testArr = runPipe (arr testFunc >> arr testFunc) one two (Lit 3 :: Core Int)
