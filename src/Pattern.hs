@@ -37,20 +37,6 @@ type Combiner = Nat -> Nat -> Nat -> ProcRT ()
 -- recv from 1, send to 2
 type Basic = Nat -> Nat -> ProcRT ()
 
-data AProcRT where
-  AProcRT
-    :: forall a. Serialise a
-    => TypeRep a
-    -> ProcRT a
-    -> AProcRT
-
-data AProcRTFunc a where
-  AProcRTFunc
-    :: forall a c. (Serialise a, Serialise c)
-    => TypeRep c
-    -> (Core a -> ProcRT c)
-    -> AProcRTFunc a
-
 data Pipe a (b  :: Type) =
   (Serialise a, Serialise b) => Pipe
     { start :: (Nat, TypeRep a)
@@ -160,8 +146,8 @@ arr f sender receiver
   rightP = rightArrow (S $ getMaximum leftP) (S $ getMaximum leftP)
 
 -- execution
-runPipe :: (Nat -> Nat -> Pipe a b) -> Nat -> Nat -> Core a -> [ProcessRT ()]
-runPipe f start finish = runPipe' $ f start finish
+runPipe :: Nat -> Nat -> Core a -> (Nat -> Nat -> Pipe a b) -> [ProcessRT ()]
+runPipe start finish x f = runPipe' (f start finish) x
 
 -- helper function zone
 compose' :: Pipe a b -> Pipe b c -> Pipe a c
@@ -296,7 +282,7 @@ selectWith (fl :: Core c -> Core e) fr (leftP@Pipe{} :: Pipe a c) (rightP@Pipe{}
   rightRecv = startNat rightP
 
   allRole =
-    receiver : (Set.toList $ Set.union (getAllRoles leftP) (getAllRoles rightP))
+    Set.toList $ Set.insert receiver $ Set.union (getAllRoles leftP) (getAllRoles rightP)
   procSend = toAProcRTFunc
     (\x -> selectMulti' allRole
                         (x :: Core (Either a b))
@@ -504,81 +490,81 @@ toAProcRTFunc (f :: Core a -> ProcRT b) = AProcRTFunc (typeRep :: TypeRep b) f
 
 --   in fmap swap $ Map.toList $ Map.insertWith (>>) r (pre lk rk) $ helper True 1 0 1
 forkJoinDc2
-    :: Int
-    -> Int
-    -> Divider
-    -> Combiner
-    -> Basic
-    -> (Nat -> Nat -> Core Int -> ProcRT ())
-    -> (Nat -> Nat -> ProcRT Int)
-    -> Pipe Int Int
+  :: Int
+  -> Int
+  -> Divider
+  -> Combiner
+  -> Basic
+  -> (Nat -> Nat -> Core Int -> ProcRT ())
+  -> (Nat -> Nat -> ProcRT Int)
+  -> Pipe Int Int
 forkJoinDc2 offset level dvd comb base pre post =
-    let (_, lk, rk, r) = plrs 0
-    in  Pipe
-            { start = (startRole, typeRep :: TypeRep Int)
-            , cont  = toAProcRTFunc $ pre lk rk
-            , env   = Map.insert r (toAProc $ post lk rk)
-                          $ Map.mapWithKey (const toAProc) (helper True 1 0 1)
-            , end   = (startRole, typeRep :: TypeRep Int)
-            }
-  where
-    startRole = toEnum offset
-    helper :: Bool -> Int -> Int -> Int -> Map Nat (ProcRT ())
-        -- reached the last node
-    helper False _ _ curLvl | curLvl == 0 =
-        let (_, _, _, r) = plrs 0
-        in  Map.insertWith (>>) r (return (Lit ())) Map.empty
-        -- reached a node in basic level
-    helper True cur preLvl curLvl | curLvl == level =
-        let roleInt        = getRoleInt preLvl cur
-            (par, _, _, r) = plrs roleInt
-        in  Map.insertWith
-                (>>)
-                r
-                (base par par)
-                (if cur /= 2 ^ curLvl
-                    then helper True (cur + 1) preLvl curLvl
-                    else helper False 1 (curLvl - 2) (curLvl - 1)
-                )
-        -- reached a node in the combine level
-    helper False cur preLvl curLvl =
-        let roleInt          = getRoleInt preLvl cur
-            (par, lk, rk, r) = plrs roleInt
-        in  Map.insertWith
-                (>>)
-                r
-                (comb par lk rk)
-                (if cur /= 2 ^ curLvl
-                    then helper False (cur + 1) preLvl curLvl
-                    else helper False 1 (curLvl - 2) (curLvl - 1)
-                )
-        -- reached the node in the dividing level
-    helper True cur preLvl curLvl =
-        let roleInt          = getRoleInt preLvl cur
-            (par, lk, rk, r) = plrs roleInt
-        in  Map.insertWith
-                (>>)
-                r
-                (dvd par lk rk)
-                (if cur /= 2 ^ curLvl
-                    then helper True (cur + 1) preLvl curLvl
-                    else helper True 1 curLvl (curLvl + 1)
-                )
+  let (_, lk, rk, r) = plrs 0
+  in  Pipe
+        { start = (startRole, typeRep :: TypeRep Int)
+        , cont  = toAProcRTFunc $ pre lk rk
+        , env   = Map.insert r (toAProc $ post lk rk)
+                    $ Map.mapWithKey (const toAProc) (helper True 1 0 1)
+        , end   = (startRole, typeRep :: TypeRep Int)
+        }
+ where
+  startRole = toEnum offset
+  helper :: Bool -> Int -> Int -> Int -> Map Nat (ProcRT ())
+      -- reached the last node
+  helper False _ _ curLvl | curLvl == 0 =
+    let (_, _, _, r) = plrs 0
+    in  Map.insertWith (>>) r (return (Lit ())) Map.empty
+      -- reached a node in basic level
+  helper True cur preLvl curLvl | curLvl == level =
+    let roleInt        = getRoleInt preLvl cur
+        (par, _, _, r) = plrs roleInt
+    in  Map.insertWith
+          (>>)
+          r
+          (base par par)
+          (if cur /= 2 ^ curLvl
+            then helper True (cur + 1) preLvl curLvl
+            else helper False 1 (curLvl - 2) (curLvl - 1)
+          )
+      -- reached a node in the combine level
+  helper False cur preLvl curLvl =
+    let roleInt          = getRoleInt preLvl cur
+        (par, lk, rk, r) = plrs roleInt
+    in  Map.insertWith
+          (>>)
+          r
+          (comb par lk rk)
+          (if cur /= 2 ^ curLvl
+            then helper False (cur + 1) preLvl curLvl
+            else helper False 1 (curLvl - 2) (curLvl - 1)
+          )
+      -- reached the node in the dividing level
+  helper True cur preLvl curLvl =
+    let roleInt          = getRoleInt preLvl cur
+        (par, lk, rk, r) = plrs roleInt
+    in  Map.insertWith
+          (>>)
+          r
+          (dvd par lk rk)
+          (if cur /= 2 ^ curLvl
+            then helper True (cur + 1) preLvl curLvl
+            else helper True 1 curLvl (curLvl + 1)
+          )
 
-    plrs :: Int -> (Nat, Nat, Nat, Nat)
-    plrs x =
-        ( toEnum $ parent x + offset
-        , toEnum $ leftKid x + offset
-        , toEnum $ rightKid x + offset
-        , toEnum $ x + offset
-        )
+  plrs :: Int -> (Nat, Nat, Nat, Nat)
+  plrs x =
+    ( toEnum $ parent x + offset
+    , toEnum $ leftKid x + offset
+    , toEnum $ rightKid x + offset
+    , toEnum $ x + offset
+    )
 
-    getRoleInt lvl cur = cur - 1 + totalNode lvl
+  getRoleInt lvl cur = cur - 1 + totalNode lvl
 
-    leftKid x = 2 * x + 1
-    rightKid x = 2 * x + 2
+  leftKid x = 2 * x + 1
+  rightKid x = 2 * x + 2
 
-    totalNode x = 2 ^ (x + 1) - 1
+  totalNode x = 2 ^ (x + 1) - 1
 
-    parent 0 = 0
-    parent x = ceiling (fromIntegral x / 2 :: Double) - 1
+  parent 0 = 0
+  parent x = ceiling (fromIntegral x / 2 :: Double) - 1

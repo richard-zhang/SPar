@@ -51,11 +51,25 @@ instance Functor ProcRTF where
         BranchCont' r left right (f . cont)
 
     fmap f (Rec' var n) = Rec' var (f n)
-    fmap f (Mu' var   ) = Mu' var
+    fmap _ (Mu' var   ) = Mu' var
 
 -- type ProcRT a = Free ProcRTF (Core a)
 type ProcRT a = ProcRT' (Core a)
 type ProcRT' a = Free ProcRTF a
+
+data AProcRT where
+    AProcRT
+        :: forall a. Serialise a
+        => TypeRep a
+        -> ProcRT a
+        -> AProcRT
+  
+data AProcRTFunc a where
+    AProcRTFunc
+        :: forall a c. (Serialise a, Serialise c)
+        => TypeRep c
+        -> (Core a -> ProcRT c)
+        -> AProcRTFunc a
 
 send' :: Serialise a => Nat -> Core a -> ProcRT a
 send' role value = liftF $ Send' role value value

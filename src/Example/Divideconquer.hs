@@ -8,6 +8,7 @@
 {-# LANGUAGE KindSignatures            #-}
 module Example.Divideconquer where
 import Lib
+import Pattern
 
 helloWorld3 :: [ProcessRT ()]
 helloWorld3 =

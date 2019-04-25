@@ -11,7 +11,6 @@ import           Data.List                      ( intercalate )
 import           Data.Sequence                  ( Seq )
 import           Data.String
 import           Data.Type.Natural              ( Nat )
-import           Data.Typeable
 import           Language.C
 import           Data.IORef
 import           System.IO.Unsafe
@@ -56,7 +55,9 @@ instrToCBlock (CInitChan   chan) = liftEToB $ (chanName chan) <-- chanInit
 instrToCBlock (CDeleteChan chan) = liftEToB $ chanDispose (chanName chan)
 instrToCBlock (CSend chan expr) =
   liftEToB $ chanActionGeneral True (chanName chan) expr
-instrToCBlock (CRecv chan expr) = if getDebugFlag then tryAddDebugStat else recvStat
+instrToCBlock (CRecv chan expr) = if getDebugFlag
+  then tryAddDebugStat
+  else recvStat
  where
   recvStat        = liftEToB $ chanActionGeneral False (chanName chan) expr
   debugStat       = liftEToB $ printDebug expr
@@ -64,10 +65,10 @@ instrToCBlock (CRecv chan expr) = if getDebugFlag then tryAddDebugStat else recv
 instrToCBlock (CDecla var stype) = CBlockDecl $ stypeToCDecl stype var
 instrToCBlock (CAssgn x value) =
   liftEToB $ (varName x) <-- convertToCExpr value
-instrToCBlock (CEnd exp              ) = CBlockStmt cvoidReturn
--- CBlockStmt $ creturn $ convertToCExpr exp 
-instrToCBlock (CBranch exp left right) = CBlockStmt $ cifElse
-  (convertToCExpr exp ==: cVar "LEFT")
+instrToCBlock (CEnd _expr             ) = CBlockStmt cvoidReturn
+-- CBlockStmt $ creturn $ convertToCExpr expr
+instrToCBlock (CBranch expr left right) = CBlockStmt $ cifElse
+  (convertToCExpr expr ==: cVar "LEFT")
   (instrsToS left)
   (instrsToS right)
 instrToCBlock (CSelect x y z left right) = CBlockStmt
@@ -86,7 +87,7 @@ instrToCBlock (CEither2Label x y) =
 instrToCBlock (CRec role) = liftEToB $ cVar (procRTName role) # []
 
 chanActionGeneral :: Bool -> CExpr -> Exp a -> CExpr
-chanActionGeneral isSend channel exp@(Exp b stype) = case stype of
+chanActionGeneral isSend channel expr@(Exp _ stype) = case stype of
   (NumSingleType (IntegralNumType _)) -> f "int"
   (NumSingleType (FloatingNumType _)) -> f "double"
   (LabelSingleType                  ) -> f "int"
@@ -96,8 +97,8 @@ chanActionGeneral isSend channel exp@(Exp b stype) = case stype of
   (ProductSingleType _ _            ) -> buf_action
  where
   action  = if isSend then "send" else "recv"
-  ptrExpr = pre Addr $ convertToCExpr exp
-  cexpr   = if isSend then convertToCExpr exp else ptrExpr
+  ptrExpr = pre Addr $ convertToCExpr expr
+  cexpr   = if isSend then convertToCExpr expr else ptrExpr
   f []     = cVar (intercalate "_" ["chan", action]) # [channel, cexpr]
   f prefix = cVar (intercalate "_" ["chan", action, prefix]) # [channel, cexpr]
   buf_action =
@@ -105,7 +106,7 @@ chanActionGeneral isSend channel exp@(Exp b stype) = case stype of
       # [channel, ptrExpr, sizeOfDecl $ ty2Decl $ stypeToTypeSpec stype]
 
 convertToCExpr :: Exp a -> CExpr
-convertToCExpr (Exp (exp :: Core a) stype) = case exp of
+convertToCExpr (Exp (expr :: Core a) stype) = case expr of
   Lit x           -> stypeToCExpr stype x
   Var num         -> CVar (internalIdent $ "v" ++ show num) undefNode
   (Inl :$ subExp) -> sumCExp (Left $ Exp subExp $ getLeftSumType stype) stype -- for merge
@@ -125,6 +126,8 @@ convertToCExpr (Exp (exp :: Core a) stype) = case exp of
                           stype
   ((Prim ident _) :$ subExp) ->
     cVar ident # [convertToCExpr (Exp subExp singleType)]
+  (Id :$ subExp) -> convertToCExpr (Exp subExp stype)
+  _ -> undefined
 
 printDebug :: Exp a -> CExpr
 printDebug = debugPrint . samplingCExpr
@@ -134,14 +137,14 @@ printDebug = debugPrint . samplingCExpr
 -- Get the firstelement if array
 -- It can debug
 samplingCExpr :: Exp a -> (CExpr, String)
-samplingCExpr e@(Exp exp stype) = case stype of
+samplingCExpr e@(Exp _ stype) = case stype of
   (NumSingleType (IntegralNumType _)) -> (cExpr, "%d")
   (NumSingleType (FloatingNumType _)) -> (cExpr, "%lf")
   (UnitSingleType                   ) -> (cExpr, "%d")
   (LabelSingleType                  ) -> (cExpr, "%d")
-  (ProductSingleType _ _            ) -> (fromIntegral 99, "%d")
-  (SumSingleType     _ _            ) -> (fromIntegral 99, "%d")
-  (ListSingleType stype             ) -> (cExpr ! 0, "%d") -- TODO
+  (ProductSingleType _ _            ) -> (CMember cExpr (fromString "fst") False undefNode, "%d") -- TODO
+  (SumSingleType     _ _            ) -> (fromIntegral (99 :: Integer), "%d") --TODO
+  (ListSingleType _                 ) -> (cExpr ! 0, "%d") -- TODO
   where cExpr = convertToCExpr e
 
 debugPrint :: (CExpr, String) -> CExpr
@@ -234,9 +237,10 @@ dataStructDecl (ASingleType s@(ListSingleType stype)) = CDecl
   [CStorageSpec $ CTypedef undefNode, CTypeSpec $ stypeToTypeSpec stype]
   [(Just $ ptr $ fromString $ show s, Nothing, Nothing)]
   undefNode
+dataStructDecl _ = undefined
 
 sumCExp :: Either (Exp a) (Exp b) -> SingleType (Either a b) -> CExpr
-sumCExp exp s@(SumSingleType sa sb) = case exp of
+sumCExp expr s@(SumSingleType _ _) = case expr of
   Left expL -> defCompoundLit
     (show s)
     [ ([], initExp $ cVar "LEFT")
@@ -247,11 +251,13 @@ sumCExp exp s@(SumSingleType sa sb) = case exp of
     [ ([], initExp $ cVar "RIGHT")
     , ([], initList [([memberDesig "right"], initExp $ convertToCExpr expR)])
     ]
+sumCExp _ _ = undefined
 
 productCExp :: Exp a -> Exp b -> SingleType (a, b) -> CExpr
-productCExp a b s@(ProductSingleType sa sb) = defCompoundLit
+productCExp a b s@(ProductSingleType _ _) = defCompoundLit
   (show s)
   [([], initExp $ convertToCExpr a), ([], initExp $ convertToCExpr b)]
+productCExp _ _ _ = undefined
 
 numTypeToCExpr :: NumType a -> a -> CExpr
 numTypeToCExpr (IntegralNumType (TypeInt _)) x =
@@ -260,9 +266,9 @@ numTypeToCExpr (FloatingNumType (TypeFloat _)) x =
   CConst (CFloatConst (cFloat x) undefNode)
 
 mainFunc :: CID -> [Nat] -> CFunDef
-mainFunc cid roles = fun [intTy] "main" [] (mainFuncStat cid roles)
+mainFunc cid roles = fun [intTy] "main" [] mainFuncStat
  where
-  mainFuncStat cid roles = CCompound
+  mainFuncStat = CCompound
     []
     (  fmap (\chan -> liftEToB $ (cVar $ chanName__ chan) <-- chanInit)
             [1 .. cid - 1]
@@ -275,19 +281,20 @@ mainFunc cid roles = fun [intTy] "main" [] (mainFuncStat cid roles)
     undefNode
 
 getLeftSumType :: SingleType (Either a b) -> SingleType a
-getLeftSumType (SumSingleType sa sb) = sa
+getLeftSumType (SumSingleType sa _) = sa
+getLeftSumType _                    = undefined
 
 getRightSumType :: SingleType (Either a b) -> SingleType b
-getRightSumType (SumSingleType sa sb) = sb
+getRightSumType (SumSingleType _ sb) = sb
+getRightSumType _                    = undefined
 
 getLeftProdType :: SingleType (a, b) -> SingleType a
-getLeftProdType (ProductSingleType a b) = a
+getLeftProdType (ProductSingleType a _) = a
+getLeftProdType _                       = undefined
 
 getRightProdType :: SingleType (a, b) -> SingleType b
-getRightProdType (ProductSingleType a b) = b
-
-stypeToTypeRep :: Typeable a => SingleType a -> TypeRep
-stypeToTypeRep (x :: SingleType a) = typeOf (undefined :: a)
+getRightProdType (ProductSingleType _ b) = b
+getRightProdType _                       = undefined
 
 pthreadCreate_ :: CExpr -> CExpr -> CExpr -> CExpr -> CExpr
 pthreadCreate_ a b c d = (cVar "pthread_create") # [a, b, c, d]
