@@ -46,7 +46,10 @@ codeGenDebug isDebug xs | True || isDual = codeGen
                         ["stdint", "stdio", "stdlib", "chan", "pthread"]
 
 codeGenBuildRun :: Serialise a => [ProcessRT a] -> IO Bool
-codeGenBuildRun xs = codeGenBuildRun' $ fmap (\(x, y) -> (toAProc x, y)) xs
+codeGenBuildRun = codeGenBuildRun' . conv 
+
+conv :: Serialise a => [ProcessRT a] -> [AProcessRT]
+conv = fmap (\(x,y) -> (toAProc x, y))
 
 codeGenBuildRun' :: [AProcessRT] -> IO Bool
 codeGenBuildRun' xs = do

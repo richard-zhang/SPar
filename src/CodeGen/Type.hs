@@ -34,7 +34,7 @@ equal (NumSingleType (FloatingNumType _)) (NumSingleType (FloatingNumType _)) =
     True
 equal LabelSingleType         LabelSingleType       = True
 equal (SumSingleType     a b) (SumSingleType a' b') = equal a a' && equal b b'
-equal (ProductSingleType a b) (SumSingleType a' b') = equal a a' && equal b b'
+equal (ProductSingleType a b) (ProductSingleType a' b') = equal a a' && equal b b'
 equal UnitSingleType          UnitSingleType        = True
 equal (ListSingleType a)      (ListSingleType b)    = a `equal` b
 equal _                       _                     = False
@@ -48,17 +48,23 @@ sTypeHeight (UnitSingleType       ) = 0
 sTypeHeight (ListSingleType a     ) = 1 + sTypeHeight a
 
 compareSingleType :: SingleType a -> SingleType b -> Ordering
-compareSingleType a b | a `equal` b = EQ
-                      | otherwise   = (sTypeHeight a) `compare` (sTypeHeight b)
+compareSingleType a b
+    | a `equal` b = EQ
+    | otherwise = case (sTypeHeight a) `compare` (sTypeHeight b) of
+        EQ -> LT
+        x  -> x
 
 instance Show (SingleType a) where
     show (NumSingleType (IntegralNumType _)) = "int"
     show (NumSingleType (FloatingNumType _)) = "float"
-    show UnitSingleType = "unit"
-    show LabelSingleType = "Label"
+    show UnitSingleType                      = "unit"
+    show LabelSingleType                     = "Label"
     show (SumSingleType a b) = intercalate "_" ["Sum", show a, show b]
     show (ProductSingleType a b) = intercalate "_" ["Prod", show a, show b]
-    show (ListSingleType a) = intercalate "_" ["List", show a]
+    show (ListSingleType a     )             = intercalate "_" ["List", show a]
+
+instance Show ASingleType where
+    show (ASingleType s) = show s
 
 toASingleType :: SingleType a -> ASingleType
 toASingleType stype = ASingleType stype
@@ -151,3 +157,15 @@ instance Repr a => Repr [a] where
 
 -- instance (Repr a, Repr b) => Repr (a -> b) where
 --     singleType = FuncSingleType singleType singleType
+
+-- ty1 = ListSingleType (singleType :: SingleType Int)
+-- ty2 = ProductSingleType ty1 ty1
+-- ty3 = SumSingleType UnitSingleType (singleType :: SingleType Int)
+-- ty4 = SumSingleType ty3 ty2
+
+-- ty1' = toASingleType ty1
+-- ty2' = toASingleType ty2
+-- ty3' = toASingleType ty3
+-- ty4' = toASingleType ty4
+
+-- ts = [ty1', ty2', ty3', ty4']

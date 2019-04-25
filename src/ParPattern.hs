@@ -63,9 +63,10 @@ arr (f :: Core (a -> b)) sender = case f of
   Inl -> withOutNewRole
   Inr -> withOutNewRole
   Id  -> withOutNewRole
-  _   -> withNewRole
+  _   -> withOutNewRole
  where
   receiver    = sender + 1
+  withNewRole :: Pipe a b
   withNewRole = Pipe { start = (sender, typeRep)
                      , cont  = procSend
                      , env   = Map.singleton receiver procRecv

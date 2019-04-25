@@ -15,7 +15,6 @@ import           Data.Maybe
 import           Data.Sequence                  ( Seq )
 import qualified Data.Sequence                 as Seq
 import           Data.Type.Natural
-import           Data.Typeable
 import           Language.C              hiding ( setFlag )
 import           System.IO.Unsafe
 
@@ -35,9 +34,8 @@ data CodeGenState = CodeGenState
 newtype CodeGen m a = CodeGen { runCodeGen :: StateT CodeGenState m a }
     deriving (Functor, Applicative, Monad, MonadState CodeGenState, MonadIO)
 
--- evalCodeGen :: CodeGen Identity [(Nat, (Seq Instr))] -> CTranslUnit
--- evalCodeGen = evalCodeGenHelper runIdentity
-evalCodeGen = evalCodeGenHelper unsafePerformIO
+evalCodeGen :: CodeGen IO [(Nat, Seq Instr)] -> CTranslUnit
+evalCodeGen = (evalCodeGenHelper unsafePerformIO) 
 
 evalCodeGenHelper
     :: (forall a . m a -> a) -> CodeGen m [(Nat, (Seq Instr))] -> CTranslUnit
@@ -45,7 +43,7 @@ evalCodeGenHelper f ma = codeGenCombined instrs st
     where (instrs, st) = f $ runStateT (runCodeGen ma) initCodeGenState
 
 codeGenCombined :: [(Nat, Seq Instr)] -> CodeGenState -> CTranslUnit
-codeGenCombined instrs state = CTranslUnit
+codeGenCombined instrs st = CTranslUnit
     (  [labelEnum]
     ++ sumTypeDecls
     ++ channelDecls
@@ -55,10 +53,10 @@ codeGenCombined instrs state = CTranslUnit
     )
     undefNode
   where
-    cid          = chanNext state
+    cid          = chanNext st
     channelDecls = chanDecls cid
     roles        = fmap fst instrs
-    sumTypeDecls = fmap (CDeclExt . dataStructDecl) $ Set.toList $ dataStructCollect state
+    sumTypeDecls = fmap (CDeclExt . dataStructDecl) $ Set.toList $ dataStructCollect st
     main         = [CFDefExt $ mainFunc cid roles]
     funcsRt      = fmap (CFDefExt . uncurry instrToFuncRt) instrs
     funcsCaller  = fmap (CFDefExt . pthreadFunc . fst) instrs

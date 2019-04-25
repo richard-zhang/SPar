@@ -372,9 +372,6 @@ procName name = "proc" ++ (show $ fromEnum name)
 procRTName :: Nat -> String
 procRTName name = procName name ++ "Rt"
 
-instrToFunc :: Nat -> Seq Instr -> CFunDef
-instrToFunc role instrs = fun [voidTy] (procName role) [] (instrsToS instrs)
-
 instrToFuncRt :: Nat -> Seq Instr -> CFunDef
 instrToFuncRt role instrs =
   fun [voidTy] (procRTName role) [] (instrsToS instrs)
