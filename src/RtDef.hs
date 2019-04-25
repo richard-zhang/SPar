@@ -63,13 +63,22 @@ data AProcRT where
         => TypeRep a
         -> ProcRT a
         -> AProcRT
-  
+
 data AProcRTFunc a where
     AProcRTFunc
         :: forall a c. (Serialise a, Serialise c)
         => TypeRep c
         -> (Core a -> ProcRT c)
         -> AProcRTFunc a
+
+type AProcessRT = (AProcRT, Nat)
+
+toAProc :: Serialise a => ProcRT a -> AProcRT
+toAProc (val :: ProcRT a) = AProcRT (typeRep :: TypeRep a) val
+
+toAProcRTFunc
+    :: (Serialise a, Serialise b) => (Core a -> ProcRT b) -> AProcRTFunc a
+toAProcRTFunc (f :: Core a -> ProcRT b) = AProcRTFunc (typeRep :: TypeRep b) f
 
 send' :: Serialise a => Nat -> Core a -> ProcRT a
 send' role value = liftF $ Send' role value value

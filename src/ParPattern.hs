@@ -131,8 +131,15 @@ arrowRight
 arrowRight = (arrowId +++)
 
 -- execution
-runPipe :: Nat -> Core a -> (ArrowPipe a b) -> [ProcessRT ()]
-runPipe start x f = runPipe' (f start) x
+runPipe :: Nat -> Core a -> (ArrowPipe a b) -> [AProcessRT]
+runPipe start x arrowPipe = runPipe' (arrowPipe start) x
+ where
+  runPipe' pipe val = toAProcesses $ Map.insertWith bind key procVal (env pipe)
+   where
+    key      = startNat pipe
+    procFunc = cont pipe
+    procVal  = callAProcRTFunc procFunc val
+    toAProcesses procMap = fmap swap $ Map.toList procMap
 
 -- helper function zone
 compose :: Pipe a b -> Pipe b c -> Pipe a c
@@ -238,9 +245,8 @@ arrowSum (fl :: Core c -> Core e) fr (leftP@Pipe{} :: Pipe a c) (rightP@Pipe{} :
   rightEndSend = endNat rightP
   receiver     = getMaximum leftP
 
-  allRole =
-    Set.toList $ Set.union (getAllRoles leftP) (getAllRoles rightP)
-  procSend = toAProcRTFunc
+  allRole      = Set.toList $ Set.union (getAllRoles leftP) (getAllRoles rightP)
+  procSend     = toAProcRTFunc
     (\x -> selectMulti' allRole
                         (x :: Core (Either a b))
                         (ignoreOutput . send' leftRecv)
@@ -285,16 +291,6 @@ plusHelper leftP@Pipe{} rightP@Pipe{} = arrowSum (Inl :$) (Inr :$) leftP rightP
 
 barHelper :: Pipe a c -> Pipe b c -> ArrowPipe (Either a b) c
 barHelper leftP@Pipe{} rightP@Pipe{} = arrowSum id id leftP rightP
-
-runPipe' :: Pipe a b -> Core a -> [ProcessRT ()]
-runPipe' pipe val = toProcessRT $ Map.insertWith bind key procVal (env pipe)
- where
-  key      = fst $ start pipe
-  procFunc = cont pipe
-  procVal  = callAProcRTFunc procFunc val
-  toProcessRT procMap =
-    let f (AProcRT _ proc) = ignoreOutput proc
-    in  (swap . fmap f) <$> Map.toList procMap
 
 -- utility functions
 getAllRoles :: Pipe a b -> Set Nat
@@ -434,13 +430,6 @@ bind4 (AProcRT ty proc) (AProcRTFunc ty2 (func :: Core c -> ProcRT b)) =
     Just HRefl -> AProcRT ty2 (proc >>= func)
     Nothing    -> error "AProcRT and AProcRTFunc are not compatible"
   where rep = typeRep :: TypeRep c
-
-toAProc :: Serialise a => ProcRT a -> AProcRT
-toAProc (val :: ProcRT a) = AProcRT (typeRep :: TypeRep a) val
-
-toAProcRTFunc
-  :: (Serialise a, Serialise b) => (Core a -> ProcRT b) -> AProcRTFunc a
-toAProcRTFunc (f :: Core a -> ProcRT b) = AProcRTFunc (typeRep :: TypeRep b) f
 
 getRecvProcOrFunc :: Pipe a b -> Nat -> Either AProcRT (AProcRTFunc a)
 getRecvProcOrFunc pipe@Pipe {..} receiver =

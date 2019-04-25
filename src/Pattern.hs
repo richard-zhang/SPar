@@ -146,8 +146,15 @@ arr f sender receiver
   rightP = rightArrow (S $ getMaximum leftP) (S $ getMaximum leftP)
 
 -- execution
-runPipe :: Nat -> Nat -> Core a -> (Nat -> Nat -> Pipe a b) -> [ProcessRT ()]
+runPipe :: Nat -> Nat -> Core a -> (Nat -> Nat -> Pipe a b) -> [AProcessRT]
 runPipe start finish x f = runPipe' (f start finish) x
+ where
+  runPipe' pipe val = toAProcesses $ Map.insertWith bind key procVal (env pipe)
+   where
+    key      = startNat pipe
+    procFunc = cont pipe
+    procVal  = callAProcRTFunc procFunc val
+    toAProcesses procMap = fmap swap $ Map.toList procMap
 
 -- helper function zone
 compose' :: Pipe a b -> Pipe b c -> Pipe a c
@@ -281,8 +288,8 @@ selectWith (fl :: Core c -> Core e) fr (leftP@Pipe{} :: Pipe a c) (rightP@Pipe{}
   leftRecv  = startNat leftP
   rightRecv = startNat rightP
 
-  allRole =
-    Set.toList $ Set.insert receiver $ Set.union (getAllRoles leftP) (getAllRoles rightP)
+  allRole   = Set.toList $ Set.insert receiver $ Set.union (getAllRoles leftP)
+                                                           (getAllRoles rightP)
   procSend = toAProcRTFunc
     (\x -> selectMulti' allRole
                         (x :: Core (Either a b))
@@ -334,16 +341,6 @@ generalSelector' leftP@Pipe{} rightP@Pipe{} =
 
 selector' :: Pipe a c -> Pipe b c -> Nat -> Nat -> Pipe (Either a b) c
 selector' leftP@Pipe{} rightP@Pipe{} = selectWith id id leftP rightP
-
-runPipe' :: Pipe a b -> Core a -> [ProcessRT ()]
-runPipe' pipe val = toProcessRT $ Map.insertWith bind key procVal (env pipe)
- where
-  key      = fst $ start pipe
-  procFunc = cont pipe
-  procVal  = callAProcRTFunc procFunc val
-  toProcessRT procMap =
-    let f (AProcRT _ proc) = ignoreOutput proc
-    in  (swap . fmap f) <$> Map.toList procMap
 
 -- utility functions
 getAllRoles :: Pipe a b -> Set Nat
@@ -480,13 +477,6 @@ bind4 (AProcRT ty proc) (AProcRTFunc ty2 (func :: Core c -> ProcRT b)) =
     Just HRefl -> AProcRT ty2 (proc >>= func)
     Nothing    -> error "AProcRT and AProcRTFunc are not compatible"
   where rep = typeRep :: TypeRep c
-
-toAProc :: Serialise a => ProcRT a -> AProcRT
-toAProc (val :: ProcRT a) = AProcRT (typeRep :: TypeRep a) val
-
-toAProcRTFunc
-  :: (Serialise a, Serialise b) => (Core a -> ProcRT b) -> AProcRTFunc a
-toAProcRTFunc (f :: Core a -> ProcRT b) = AProcRTFunc (typeRep :: TypeRep b) f
 
 --   in fmap swap $ Map.toList $ Map.insertWith (>>) r (pre lk rk) $ helper True 1 0 1
 forkJoinDc2

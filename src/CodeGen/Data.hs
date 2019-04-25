@@ -65,7 +65,7 @@ instrToCBlock (CRecv chan expr) = if getDebugFlag
 instrToCBlock (CDecla var stype) = CBlockDecl $ stypeToCDecl stype var
 instrToCBlock (CAssgn x value) =
   liftEToB $ (varName x) <-- convertToCExpr value
-instrToCBlock (CEnd _expr             ) = CBlockStmt cvoidReturn
+instrToCBlock (CEnd expr             ) = CBlockStmt (CExpr (Just $ convertToCExpr expr) undefNode)-- CBlockStmt cvoidReturn
 -- CBlockStmt $ creturn $ convertToCExpr expr
 instrToCBlock (CBranch expr left right) = CBlockStmt $ cifElse
   (convertToCExpr expr ==: cVar "LEFT")

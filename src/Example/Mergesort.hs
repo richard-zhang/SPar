@@ -11,7 +11,7 @@ import           Lib
 import ParPattern
 -- import Pattern
 
-testArr :: [ProcessRT ()]
+testArr :: [AProcessRT]
 testArr =
     -- runPipe one twenty val $ expr
     runPipe one val $ expr
@@ -19,8 +19,10 @@ testArr =
 func = Prim "test" undefined :: Core (Int -> Int)
 func1 = Prim "test1" undefined :: Core ((Int, Int) -> (Int, Int))
 
-expr = ((arr func) &&& (arr func)) >>> arr func1 >>> arr Fst >>> arr func
+-- expr = ((arr func) &&& (arr func)) >>> arr func1 >>> arr Fst >>> arr func
+expr = arr func
 val = Lit (3) :: Core (Int)
+-- val = Lit [1, 2, 4, 3, 2, 1] :: Core [Int]
 
 -- func = Prim "test" undefined :: Core (Int -> Int)
 -- func1 = Prim "test1" undefined :: Core ((Int, Int) -> (Int, Int))
@@ -32,15 +34,23 @@ val = Lit (3) :: Core (Int)
 -- K (() + int) + I * I 
 -- Either (Either () Int) ([a], [a])
 -- split :: Core [a] -> C
-split :: Core ([a] -> (Either (Either () Int) ([a], [a])))
+split :: Core ([Int] -> (Either (Either () Int) ([Int], [Int])))
 split = Prim "split" undefined
 
-merge :: Core ((Either (Either () Int) ([a], [a])) -> [a])
+merge :: Core ((Either (Either () Int) ([Int], [Int])) -> [Int])
 merge = Prim "merge" undefined
 
-sort :: Core ([a] -> [a])
+sort :: Core ([Int] -> [Int])
 sort = Prim "sort" undefined
 
+k1 = arr split
+        >>> (   arr Inl
+            ||| (   (arr Fst >>> arr sort)
+                &&& (arr Snd >>> arr sort)
+                >>> arr Inr
+                )
+            )
+        >>> arr merge
 -- mergeSortBase :: Serialise a => ArrowPipe [a] [a]
 -- mergeSortBase =
 --     arr split

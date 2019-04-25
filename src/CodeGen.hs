@@ -33,19 +33,23 @@ data CgRule where
 
 -- error "the list of processes are not dual"
 -- | checkDual xs = codeGen
-codeGenDebug :: Repr a => Bool -> [ProcessRT a] -> IO ()
+codeGenDebug :: Bool -> [AProcessRT] -> IO ()
 codeGenDebug isDebug xs | True || isDual = codeGen
                         | otherwise = putStrLn "processes not dual" >> codeGen
   where
-    isDual  = checkDual xs
+    isDual = checkDual $ fmap f xs
+    f (AProcRT _ process, role) = (ignoreOutput process, role)
     codeGen = (if isDebug then makeTrue else return ())
         >> writeFile "codegen/code.c" (headers ++ source ++ "\n")
     source  = (show . pretty . testCodeGen) xs
     headers = concatMap (\x -> "#include<" ++ x ++ ".h>\n")
                         ["stdint", "stdio", "stdlib", "chan", "pthread"]
 
-codeGenBuildRun :: Repr a => [ProcessRT a] -> IO Bool
-codeGenBuildRun xs = do
+codeGenBuildRun :: Serialise a => [ProcessRT a] -> IO Bool
+codeGenBuildRun xs = codeGenBuildRun' $ fmap (\(x, y) -> (toAProc x, y)) xs
+
+codeGenBuildRun' :: [AProcessRT] -> IO Bool
+codeGenBuildRun' xs = do
     codeGenDebug False xs
     (rc, _, _) <- readCreateProcessWithExitCode (shell "make build") []
     case rc of
@@ -56,15 +60,11 @@ codeGenBuildRun xs = do
                 _           -> putStrLn "Failed at the runtime" >> return False
         _ -> putStrLn "Failed at the build time" >> return False
 
-testCodeGen :: Repr a => [ProcessRT a] -> CTranslUnit
-testCodeGen xs = evalCodeGen $ traverseToCodeGen singleType xs
+testCodeGen :: [AProcessRT] -> CTranslUnit
+testCodeGen xs = evalCodeGen $ traverseToCodeGen xs
 
-traverseToCodeGen
-    :: MonadIO m
-    => SingleType a
-    -> [ProcessRT a]
-    -> CodeGen m [(Nat, (Seq Instr))]
-traverseToCodeGen stype ps = mapM (uncurry $ helper stype) ps
+traverseToCodeGen :: MonadIO m => [AProcessRT] -> CodeGen m [(Nat, (Seq Instr))]
+traverseToCodeGen ps = mapM (uncurry $ helper) ps
   where
     defaultContext = ExtraContext { ruleForPureCg = RReturn }
 
@@ -72,8 +72,8 @@ traverseToCodeGen stype ps = mapM (uncurry $ helper stype) ps
     debug = (liftIO . putStrLn . show)
 
     -- helper :: MonadIO m => SingleType a -> ProcRT a -> Nat -> CodeGen m (Nat, Seq Instr)
-    helper singType process role =
-        fmap (role, ) $ helper_ singType process role defaultContext
+    helper (AProcRT typeRep process) role =
+        fmap (role, ) $ helper_ singleType process role defaultContext
 
     -- TODO very inefficient way to update data struct collects update on every send, select and pure
     helper_

@@ -10,9 +10,9 @@ module Example.Divideconquer where
 import Lib
 import Pattern
 
-helloWorld3 :: [ProcessRT ()]
+helloWorld3 :: [AProcessRT]
 helloWorld3 =
-    runPipe' (compose' (helloWorld2 1 0) (helloWorld2 1 0)) (Lit 10 :: Core Int)
+    runPipe undefined undefined (Lit 10 :: Core Int) (\_ _ -> compose' (helloWorld2 1 0) (helloWorld2 1 0))
 
 helloWorld2 :: Int -> Int -> Pipe Int Int
 helloWorld2 y x = forkJoinDc2 x y dvd comb basic pre post
