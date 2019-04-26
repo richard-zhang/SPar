@@ -2,4 +2,4 @@ module Main where
 import Spar
 
 main :: IO ()
-main = codeGenDebug True testArr
+main = codeGenDebug True (conv cgts9)

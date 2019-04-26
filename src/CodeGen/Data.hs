@@ -65,7 +65,8 @@ instrToCBlock (CRecv chan expr) = if getDebugFlag
 instrToCBlock (CDecla var stype) = CBlockDecl $ stypeToCDecl stype var
 instrToCBlock (CAssgn x value) =
   liftEToB $ (varName x) <-- convertToCExpr value
-instrToCBlock (CEnd expr             ) = CBlockStmt (CExpr (Just $ convertToCExpr expr) undefNode)-- CBlockStmt cvoidReturn
+instrToCBlock (CEnd expr) =
+  CBlockStmt (CExpr (Just $ convertToCExpr expr) undefNode)-- CBlockStmt cvoidReturn
 -- CBlockStmt $ creturn $ convertToCExpr expr
 instrToCBlock (CBranch expr left right) = CBlockStmt $ cifElse
   (convertToCExpr expr ==: cVar "LEFT")
@@ -92,7 +93,7 @@ chanActionGeneral isSend channel expr@(Exp _ stype) = case stype of
   (NumSingleType (FloatingNumType _)) -> f "double"
   (LabelSingleType                  ) -> f "int"
   (UnitSingleType                   ) -> f "int"
-  (ListSingleType _                 ) -> f ""
+  (ListSingleType _                 ) -> buf_action
   (SumSingleType     _ _            ) -> buf_action
   (ProductSingleType _ _            ) -> buf_action
  where
@@ -127,7 +128,7 @@ convertToCExpr (Exp (expr :: Core a) stype) = case expr of
   ((Prim ident _) :$ subExp) ->
     cVar ident # [convertToCExpr (Exp subExp singleType)]
   (Id :$ subExp) -> convertToCExpr (Exp subExp stype)
-  _ -> undefined
+  _              -> undefined
 
 printDebug :: Exp a -> CExpr
 printDebug = debugPrint . samplingCExpr
@@ -142,9 +143,10 @@ samplingCExpr e@(Exp _ stype) = case stype of
   (NumSingleType (FloatingNumType _)) -> (cExpr, "%lf")
   (UnitSingleType                   ) -> (cExpr, "%d")
   (LabelSingleType                  ) -> (cExpr, "%d")
-  (ProductSingleType _ _            ) -> (CMember cExpr (fromString "fst") False undefNode, "%d") -- TODO
-  (SumSingleType     _ _            ) -> (fromIntegral (99 :: Integer), "%d") --TODO
-  (ListSingleType _                 ) -> (cExpr ! 0, "%d") -- TODO
+  (ProductSingleType _ _) ->
+    (CMember cExpr (fromString "fst") False undefNode, "%d") -- TODO
+  (SumSingleType _ _) -> (fromIntegral (99 :: Integer), "%d") --TODO
+  (ListSingleType _ ) -> (cExpr .: "size", "%u") -- print the size TODO
   where cExpr = convertToCExpr e
 
 debugPrint :: (CExpr, String) -> CExpr
@@ -174,20 +176,23 @@ stypeToCExpr s@(ProductSingleType a b) v = defCompoundLit
   [ ([], initExp $ stypeToCExpr a (fst v))
   , ([], initExp $ stypeToCExpr b (snd v))
   ]
-stypeToCExpr s@(ListSingleType a) v = CStatExpr combStat undefNode
+stypeToCExpr s@(ListSingleType a) v = defCompoundLit
+  (show s)
+  [([], initExp sizeExpr), ([], initExp listExpr)]
  where
-    -- statment = fmap (\x y -> (("tmp" !: x) <-- stypeToCExpr s y)) (zip ([0..] :: [Int]) v)
+  sizeExpr   = (fromIntegral $ length v) :: CExpr
+  listExpr   = CStatExpr combStat undefNode
   comb       = zip ([0 ..] :: [Int]) v
   exprs      = fmap (\(x, y) -> (("tmp" !: x) <-- (stypeToCExpr a y))) comb
-  mallocExpr = castTy
+  mallocExpr = castTo
     ( malloc
     $ ((fromIntegral $ length v) * (sizeOfDecl $ ty2Decl (stypeToTypeSpec a)))
     )
-    (idSpec $ show s)
+    (decl (CTypeSpec $ stypeToTypeSpec a) justPtr Nothing)
   statements =
     CBlockDecl
-        (decl (CTypeSpec $ stypeToTypeSpec s)
-              (fromString "tmp")
+        (decl (CTypeSpec $ stypeToTypeSpec a)
+              (ptr $ fromString "tmp")
               (Just mallocExpr)
         )
       : (  fmap CBlockStmt
@@ -233,10 +238,19 @@ dataStructDecl (ASingleType s@(ProductSingleType a b)) = csu2
           [(Just $ fromString "snd", Nothing, Nothing)]
           undefNode
   ]
-dataStructDecl (ASingleType s@(ListSingleType stype)) = CDecl
-  [CStorageSpec $ CTypedef undefNode, CTypeSpec $ stypeToTypeSpec stype]
-  [(Just $ ptr $ fromString $ show s, Nothing, Nothing)]
-  undefNode
+-- dataStructDecl (ASingleType s@(ListSingleType stype)) = CDecl
+--   [CStorageSpec $ CTypedef undefNode, CTypeSpec $ stypeToTypeSpec stype]
+--   [(Just $ ptr $ fromString $ show s, Nothing, Nothing)]
+dataStructDecl (ASingleType s@(ListSingleType stype)) = csu2
+  CStructTag
+  (show s)
+  [ CDecl [CTypeSpec $ idSpec "size_t"]
+          [(Just $ fromString "size", Nothing, Nothing)]
+          undefNode
+  , CDecl [CTypeSpec $ stypeToTypeSpec stype]
+          [(Just $ ptr $ fromString $ fromString "value", Nothing, Nothing)]
+          undefNode
+  ]
 dataStructDecl _ = undefined
 
 sumCExp :: Either (Exp a) (Exp b) -> SingleType (Either a b) -> CExpr

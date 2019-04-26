@@ -115,6 +115,9 @@ ptr :: CDeclr -> CDeclr
 ptr (CDeclr nm mods cstr attrs node) =
   CDeclr nm (CPtrDeclr [] undefNode : mods) cstr attrs node
 
+justPtr :: CDeclr
+justPtr = CDeclr Nothing [CPtrDeclr [] undefNode] Nothing [] undefNode
+
 arr :: CDeclr -> CDeclr
 arr (CDeclr nm mods cstr attrs node) =
   CDeclr nm (CArrDeclr [] (CNoArrSize False) undefNode : mods) cstr attrs node
@@ -243,6 +246,14 @@ anoyUnion = csu1 CUnionTag
 (!) :: CExpr -> CExpr -> CExpr
 arr !ind = CIndex arr ind undefNode
 infixl 8 !
+
+(.:) :: CExpr -> String -> CExpr
+struct .: tag = CMember struct (fromString tag) False undefNode
+infixl 8 .:
+
+(->:) :: CExpr -> String -> CExpr
+struct ->: tag = CMember struct (fromString tag) True undefNode
+infixl 8 ->:
 
 (!:) :: String -> Int -> CExpr
 varName !: ind = (fromString varName) ! (cInt $ fromIntegral ind)
