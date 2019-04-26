@@ -439,3 +439,6 @@ getRecvProcOrFunc pipe@Pipe {..} receiver =
     Nothing   -> if startNat pipe == endNat pipe
       then Right cont
       else error "mistake can't find"
+
+nextRole :: Nat -> Nat
+nextRole x = x + 1

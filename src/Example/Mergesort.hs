@@ -20,9 +20,9 @@ func = Prim "test" undefined :: Core (Int -> Int)
 func1 = Prim "test1" undefined :: Core ((Int, Int) -> (Int, Int))
 
 -- expr = ((arr func) &&& (arr func)) >>> arr func1 >>> arr Fst >>> arr func
-expr = mergeSort 0
+expr = mergeSort 1
 -- val = Lit (3) :: Core (Int)
-val = Lit [1, 2, 4, 3, 2, 1] :: Core [Int]
+val = Lit [1, 2, 4, 3, 2, 1, 10, 1000, 50, 6, 100, 4, 5, 100] :: Core [Int]
 
 -- func = Prim "test" undefined :: Core (Int -> Int)
 -- func1 = Prim "test1" undefined :: Core ((Int, Int) -> (Int, Int))
