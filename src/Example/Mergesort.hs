@@ -8,14 +8,13 @@
 {-# LANGUAGE KindSignatures            #-}
 module Example.Mergesort where
 import           Lib
-import ParPattern
+import           ParPattern
 -- import Pattern
 
-testArr :: [AProcessRT]
-testArr =
-    -- runPipe one twenty val $ expr
-    runPipe one val $ expr
- 
+testArr = runPipe one val $ expr
+
+testArr1 = runPipe1 zero (arr func)
+
 func = Prim "test" undefined :: Core (Int -> Int)
 func1 = Prim "test1" undefined :: Core ((Int, Int) -> (Int, Int))
 
@@ -43,7 +42,8 @@ merge = Prim "merge" undefined
 sort :: Core ([Int] -> [Int])
 sort = Prim "sort" undefined
 
-k1 = arr split
+k1 =
+    arr split
         >>> (   arr Inl
             ||| (   (arr Fst >>> arr sort)
                 &&& (arr Snd >>> arr sort)

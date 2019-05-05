@@ -337,13 +337,12 @@ entryFunc a@EntryRole {..} sendChan recvChan cid roles = fun
  where
   inputVarDeclr = (fromString (varName_ $ fromIntegral sendVar)) :: CDeclr
   inputDeclSpec = CTypeSpec $ stypeToTypeSpec endType
-  midBlockItems =
-    [ CBlockStmt $ instrsToS $ entryRoleToInstr a
-                                                sendVar
-                                                recvVar
-                                                sendChan
-                                                recvChan
-    ]
+  midBlockItems = fmap instrToCBlock $ toList $ entryRoleToInstr a
+                                                                 sendVar
+                                                                 recvVar
+                                                                 sendChan
+                                                                 recvChan
+
   endBlockItems   = [CBlockStmt $ creturn $ varName (fromIntegral recvVar)]
   wholeBlockItmes = funcBodyHelper cid roles midBlockItems endBlockItems
   funcStats       = CCompound [] wholeBlockItmes undefNode

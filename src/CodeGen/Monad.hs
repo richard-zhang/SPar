@@ -23,12 +23,12 @@ import           CodeGen.Type
 
 data CodeGenState = CodeGenState
   {
+    newChanTable :: Map ChanKey CID,
     chanTable :: Map ChanKey (Seq CID),
     flagTable :: Map ChanKey Nat, -- flag to indiciate which process is encountered first in the code generation
     varNext   :: Int,
     chanNext  :: CID,
-    dataStructCollect :: Set ASingleType,
-    newChanTable :: Map ChanKey CID
+    dataStructCollect :: Set ASingleType
   }
 
 newtype CodeGen m a = CodeGen { runCodeGen :: StateT CodeGenState m a }
@@ -71,9 +71,9 @@ codeGenCombinedWithEntry instrs st entry@EntryRole {..} = CTranslUnit
         getCid ChanKey { chanCreator = entryRole, chanDestroyer = startRole }
     recvChanCid =
         getCid ChanKey { chanCreator = endRole, chanDestroyer = entryRole }
-    getCid key = case fromJust $ Map.lookup key $ chanTable st of
-        (a Seq.:<| _) -> a
-        _             -> error $ "cid doesn't exist for key " ++ show key
+    getCid key = fromMaybe
+        (error ("key not exists in chantable" ++ show key))
+        (Map.lookup key $ newChanTable st)
 
 codeGenCombined :: [(Nat, Seq Instr)] -> CodeGenState -> CTranslUnit
 codeGenCombined instrs st = CTranslUnit

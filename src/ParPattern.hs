@@ -145,8 +145,8 @@ runPipe start x arrowPipe = runPipe' (arrowPipe start) x
     toAProcesses procMap = fmap swap $ Map.toList procMap
 
 -- higher-order execution
-runHighOrderPipe :: Nat -> ArrowPipe a b -> ([AProcessRT], EntryRole a b)
-runHighOrderPipe role arrowPipe =
+runPipe1 :: Nat -> ArrowPipe a b -> ([AProcessRT], EntryRole a b)
+runPipe1 role arrowPipe =
   ( toAProcesses env
   , EntryRole { entryRole = role
               , startRole = startRole
@@ -160,7 +160,7 @@ runHighOrderPipe role arrowPipe =
   endRole   = endNat pipe
   pipe      = arrowPipe startRole
   env       = updateEnvWithSendProcSafe role endRole
-    $ updateEnvWithRecvProc startRole pipe
+    $ updateEnvWithRecvProc role pipe
   toAProcesses procMap = fmap swap $ Map.toList procMap
 
 -- helper function zone
