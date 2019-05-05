@@ -31,25 +31,34 @@ data CgRule where
     RAssign :: Int -> CgRule -- Assign value to the variable
     RIgnore :: CgRule -- ignore the result 
 
+codeGenDebug :: Bool -> [AProcessRT] -> IO ()
+codeGenDebug isDebug xs = codeGenHelper evalCodeGen xs isDebug
+
+codeGenDebug1 :: Bool -> ([AProcessRT], EntryRole a b) -> IO ()
+codeGenDebug1 isDebug (xs, entry) =
+    codeGenHelper (evalCodeGen1 entry) xs isDebug
+
 -- error "the list of processes are not dual"
 -- | checkDual xs = codeGen
-codeGenDebug :: Bool -> [AProcessRT] -> IO ()
-codeGenDebug isDebug xs | True || isDual = codeGen
-                        | otherwise = putStrLn "processes not dual" >> codeGen
+codeGenHelper
+    :: (CodeGen IO [(Nat, Seq Instr)] -> CTranslUnit)
+    -> [AProcessRT]
+    -> Bool
+    -> IO ()
+codeGenHelper eval xs isDebug
+    | True || isDual = codeGen
+    | otherwise      = putStrLn "processes not dual" >> codeGen
   where
     isDual = checkDual $ fmap f xs
     f (AProcRT _ process, role) = (ignoreOutput process, role)
     codeGen = (if isDebug then makeTrue else return ())
         >> writeFile "codegen/code.c" (headers ++ source ++ "\n")
-    source  = (show . pretty . testCodeGen) xs
+    source  = (show . pretty) $ eval $ traverseToCodeGen xs
     headers = concatMap (\x -> "#include<" ++ x ++ ".h>\n")
                         ["stdint", "stdio", "stdlib", "chan", "pthread"]
 
 codeGenBuildRun :: Serialise a => [ProcessRT a] -> IO Bool
-codeGenBuildRun = codeGenBuildRun' . conv 
-
-conv :: Serialise a => [ProcessRT a] -> [AProcessRT]
-conv = fmap (\(x,y) -> (toAProc x, y))
+codeGenBuildRun = codeGenBuildRun' . fmap (\(x, y) -> (toAProc x, y))
 
 codeGenBuildRun' :: [AProcessRT] -> IO Bool
 codeGenBuildRun' xs = do
@@ -62,9 +71,6 @@ codeGenBuildRun' xs = do
                 ExitSuccess -> return True
                 _           -> putStrLn "Failed at the runtime" >> return False
         _ -> putStrLn "Failed at the build time" >> return False
-
-testCodeGen :: [AProcessRT] -> CTranslUnit
-testCodeGen xs = evalCodeGen $ traverseToCodeGen xs
 
 traverseToCodeGen :: MonadIO m => [AProcessRT] -> CodeGen m [(Nat, (Seq Instr))]
 traverseToCodeGen ps = mapM (uncurry $ helper) ps

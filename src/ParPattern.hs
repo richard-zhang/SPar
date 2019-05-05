@@ -21,6 +21,8 @@ import           Type.Reflection
 
 import           Language.Poly.Core
 import           RtDef
+import           CodeGen.Type
+import           CodeGen.Data
 
 infixr 3 ***
 infixr 3 &&&
@@ -65,7 +67,7 @@ arr (f :: Core (a -> b)) sender = case f of
   Id  -> withOutNewRole
   _   -> withOutNewRole
  where
-  receiver    = sender + 1
+  receiver = sender + 1
   withNewRole :: Pipe a b
   withNewRole = Pipe { start = (sender, typeRep)
                      , cont  = procSend
@@ -142,6 +144,25 @@ runPipe start x arrowPipe = runPipe' (arrowPipe start) x
     procVal  = callAProcRTFunc procFunc val
     toAProcesses procMap = fmap swap $ Map.toList procMap
 
+-- higher-order execution
+runHighOrderPipe :: Nat -> ArrowPipe a b -> ([AProcessRT], EntryRole a b)
+runHighOrderPipe role arrowPipe =
+  ( toAProcesses env
+  , EntryRole { entryRole = role
+              , startRole = startRole
+              , endRole   = endRole
+              , startType = getStartType pipe
+              , endType   = getEndType pipe
+              }
+  )
+ where
+  startRole = role + 1
+  endRole   = endNat pipe
+  pipe      = arrowPipe startRole
+  env       = updateEnvWithSendProcSafe role endRole
+    $ updateEnvWithRecvProc startRole pipe
+  toAProcesses procMap = fmap swap $ Map.toList procMap
+
 -- helper function zone
 compose :: Pipe a b -> Pipe b c -> Pipe a c
 compose first@Pipe{} second@Pipe{}
@@ -185,6 +206,41 @@ arrowProd
   -> Pipe b' c'
   -> Nat
   -> Pipe e (c, c')
+arrowProd (fl :: Core e -> Core b) fr (leftP@Pipe{} :: Pipe b c) (rightP@Pipe{} :: Pipe
+    b'
+    c') sender
+  = tmpPipe
+ where
+  receiver     = (getMaximum rightP) + 1
+  leftRecv     = startNat leftP
+  rightRecv    = startNat rightP
+  leftEndSend  = endNat leftP
+  rightEndSend = endNat rightP
+
+  procSend =
+    toAProcRTFunc (\x -> send' leftRecv (fl x) >> send' rightRecv (fr x))
+
+  -- before mergeing the recvProc command
+  tmpPipe = Pipe { start = (sender, typeRep :: TypeRep e)
+                 , cont  = procSend
+                 , env   = newEnv
+                 , end   = (receiver, typeRep :: TypeRep (c, c'))
+                 }
+
+  leftEnv =
+    updateEnvWithSendProcSafe receiver leftEndSend
+      $ updateEnvWithRecvProc sender leftP
+  rightEnv =
+    updateEnvWithSendProcSafe receiver rightEndSend
+      $ updateEnvWithRecvProc sender rightP
+
+  recvProc = toAProc $ do
+    x :: Core c  <- recv' leftEndSend
+    y :: Core c' <- recv' rightEndSend
+    return (Pair x y)
+
+  newEnv = Map.insertWith (flip bind) receiver recvProc
+    $ Map.unionWith bind leftEnv rightEnv
 arrowProd (fl :: Core e -> Core b) fr (leftP@Pipe{} :: Pipe b c) (rightP@Pipe{} :: Pipe
     b'
     c') sender
@@ -442,3 +498,9 @@ getRecvProcOrFunc pipe@Pipe {..} receiver =
 
 nextRole :: Nat -> Nat
 nextRole x = x + 1
+
+getStartType :: Pipe a b -> SingleType a
+getStartType Pipe {..} = singleType
+
+getEndType :: Pipe a b -> SingleType b
+getEndType Pipe {..} = singleType

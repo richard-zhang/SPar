@@ -35,12 +35,45 @@ newtype CodeGen m a = CodeGen { runCodeGen :: StateT CodeGenState m a }
     deriving (Functor, Applicative, Monad, MonadState CodeGenState, MonadIO)
 
 evalCodeGen :: CodeGen IO [(Nat, Seq Instr)] -> CTranslUnit
-evalCodeGen = (evalCodeGenHelper unsafePerformIO) 
+evalCodeGen ma = codeGenCombined instrs st
+  where
+    (instrs, st) = unsafePerformIO $ runStateT (runCodeGen ma) initCodeGenState
 
-evalCodeGenHelper
-    :: (forall a . m a -> a) -> CodeGen m [(Nat, (Seq Instr))] -> CTranslUnit
-evalCodeGenHelper f ma = codeGenCombined instrs st
-    where (instrs, st) = f $ runStateT (runCodeGen ma) initCodeGenState
+evalCodeGen1 :: EntryRole a b -> CodeGen IO [(Nat, Seq Instr)] -> CTranslUnit
+evalCodeGen1 entry ma = codeGenCombinedWithEntry instrs st entry
+  where
+    (instrs, st) = unsafePerformIO $ runStateT (runCodeGen ma) initCodeGenState
+
+codeGenCombinedWithEntry
+    :: [(Nat, Seq Instr)] -> CodeGenState -> EntryRole a b -> CTranslUnit
+codeGenCombinedWithEntry instrs st entry@EntryRole {..} = CTranslUnit
+    (  [labelEnum]
+    ++ sumTypeDecls
+    ++ channelDecls
+    ++ funcsRt
+    ++ funcsCaller
+    ++ entryFuncDecl
+    ++ main
+    )
+    undefNode
+  where
+    cid          = chanNext st
+    channelDecls = chanDecls cid
+    roles        = fmap fst instrs
+    sumTypeDecls =
+        fmap (CDeclExt . dataStructDecl) $ Set.toList $ dataStructCollect st
+    main = [CFDefExt $ emptyMain]
+    entryFuncDecl =
+        [CFDefExt $ entryFunc entry sendChanCid recvChanCid cid roles]
+    funcsRt     = fmap (CFDefExt . uncurry instrToFuncRt) instrs
+    funcsCaller = fmap (CFDefExt . pthreadFunc . fst) instrs
+    sendChanCid =
+        getCid ChanKey { chanCreator = entryRole, chanDestroyer = startRole }
+    recvChanCid =
+        getCid ChanKey { chanCreator = endRole, chanDestroyer = entryRole }
+    getCid key = case fromJust $ Map.lookup key $ chanTable st of
+        (a Seq.:<| _) -> a
+        _             -> error $ "cid doesn't exist for key " ++ show key
 
 codeGenCombined :: [(Nat, Seq Instr)] -> CodeGenState -> CTranslUnit
 codeGenCombined instrs st = CTranslUnit
@@ -56,10 +89,11 @@ codeGenCombined instrs st = CTranslUnit
     cid          = chanNext st
     channelDecls = chanDecls cid
     roles        = fmap fst instrs
-    sumTypeDecls = fmap (CDeclExt . dataStructDecl) $ Set.toList $ dataStructCollect st
-    main         = [CFDefExt $ mainFunc cid roles]
-    funcsRt      = fmap (CFDefExt . uncurry instrToFuncRt) instrs
-    funcsCaller  = fmap (CFDefExt . pthreadFunc . fst) instrs
+    sumTypeDecls =
+        fmap (CDeclExt . dataStructDecl) $ Set.toList $ dataStructCollect st
+    main        = [CFDefExt $ mainFunc cid roles]
+    funcsRt     = fmap (CFDefExt . uncurry instrToFuncRt) instrs
+    funcsCaller = fmap (CFDefExt . pthreadFunc . fst) instrs
 
 initCodeGenState :: CodeGenState
 initCodeGenState = CodeGenState { chanTable         = Map.empty

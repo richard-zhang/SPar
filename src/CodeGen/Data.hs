@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE RecordWildCards    #-}
 {-# LANGUAGE RankNTypes    #-}
 
 module CodeGen.Data where
@@ -9,6 +10,7 @@ import           Data.Char
 import           Data.Foldable
 import           Data.List                      ( intercalate )
 import           Data.Sequence                  ( Seq )
+import qualified Data.Sequence                 as Seq
 import           Data.String
 import           Data.Type.Natural              ( Nat )
 import           Language.C
@@ -21,6 +23,14 @@ import           Language.Poly.Core
 
 type CID = Int
 
+data EntryRole a b = EntryRole
+  { entryRole :: Nat
+  , startRole :: Nat
+  , endRole :: Nat
+  , startType :: SingleType a
+  , endType :: SingleType b
+  }
+
 data Channel a where
   Channel :: CID -> SingleType a -> Channel a
 
@@ -30,7 +40,7 @@ data Exp a where
 data ChanKey = ChanKey
   { chanCreator   :: Nat
   , chanDestroyer :: Nat
-  } deriving (Eq, Ord)
+  } deriving (Eq, Ord, Show)
 
 data Instr where
   CInitChan :: Channel a -> Instr
@@ -49,6 +59,19 @@ data Instr where
     -- the second int represents the value of the label
   CEither2Label :: Int -> Int -> Instr
   CRec :: Nat -> Instr
+
+entryRoleToInstr
+  :: EntryRole a b -> Integer -> Integer -> CID -> CID -> Seq Instr
+entryRoleToInstr EntryRole {..} sendVar recvVar sendCid recvCid = Seq.fromList
+  [ CSend sendChan sendExp
+  , CDecla (fromInteger recvVar) endType
+  , CRecv recvChan recvExp
+  ]
+ where
+  sendExp  = Exp (Var sendVar) startType
+  recvExp  = Exp (Var recvVar) endType
+  sendChan = Channel sendCid startType
+  recvChan = Channel recvCid endType
 
 instrToCBlock :: Instr -> CBlockItem
 instrToCBlock (CInitChan   chan) = liftEToB $ (chanName chan) <-- chanInit
@@ -284,15 +307,48 @@ mainFunc cid roles = fun [intTy] "main" [] mainFuncStat
  where
   mainFuncStat = CCompound
     []
-    (  fmap (\chan -> liftEToB $ (cVar $ chanName__ chan) <-- chanInit)
-            [1 .. cid - 1]
-    ++ (roles >>= declAndRunThread)
-    ++ fmap (liftEToB . joinThread) roles
-    ++ fmap (\chan -> liftEToB $ chanDispose (cVar $ chanName__ chan))
-            [1 .. cid - 1]
-    ++ [CBlockStmt $ creturn $ cInt 0]
-    )
+    (funcBodyHelper cid roles [] [CBlockStmt $ creturn $ cInt 0])
     undefNode
+
+emptyMain :: CFunDef
+emptyMain = fun [intTy] "main" [] mainFuncStat
+ where
+  mainFuncStat =
+    CCompound [] [CBlockStmt $ creturn $ fromIntegral (0 :: Integer)] undefNode
+
+funcBodyHelper :: CID -> [Nat] -> [CBlockItem] -> [CBlockItem] -> [CBlockItem]
+funcBodyHelper cid roles middle end =
+  (  fmap (\chan -> liftEToB $ (cVar $ chanName__ chan) <-- chanInit)
+          [1 .. cid - 1]
+  ++ (roles >>= declAndRunThread)
+  ++ middle
+  ++ fmap (liftEToB . joinThread) roles
+  ++ fmap (\chan -> liftEToB $ chanDispose (cVar $ chanName__ chan))
+          [1 .. cid - 1]
+  ++ end
+  )
+
+entryFunc :: EntryRole a b -> CID -> CID -> CID -> [Nat] -> CFunDef
+entryFunc a@EntryRole {..} sendChan recvChan cid roles = fun
+  [inputDeclSpec]
+  (procName entryRole)
+  [decl inputDeclSpec inputVarDeclr]
+  funcStats
+ where
+  inputVarDeclr = (fromString (varName_ $ fromIntegral sendVar)) :: CDeclr
+  inputDeclSpec = CTypeSpec $ stypeToTypeSpec endType
+  midBlockItems =
+    [ CBlockStmt $ instrsToS $ entryRoleToInstr a
+                                                sendVar
+                                                recvVar
+                                                sendChan
+                                                recvChan
+    ]
+  endBlockItems   = [CBlockStmt $ creturn $ varName (fromIntegral recvVar)]
+  wholeBlockItmes = funcBodyHelper cid roles midBlockItems endBlockItems
+  funcStats       = CCompound [] wholeBlockItmes undefNode
+  sendVar         = 0
+  recvVar         = 1
 
 getLeftSumType :: SingleType (Either a b) -> SingleType a
 getLeftSumType (SumSingleType sa _) = sa
