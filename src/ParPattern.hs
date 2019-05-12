@@ -31,11 +31,12 @@ infixr 2 |||
 infixr 1 >>>, <<<
 
 data Pipe a (b  :: Type) =
-  (Serialise a, Serialise b) => Pipe
-    { start :: (Nat, TypeRep a)
+  (Serialise a, Serialise b) =>
+  Pipe
+    { start :: (Nat, SingleType a)
     , cont  :: AProcRTFunc a
     , env   :: Map Nat AProcRT
-    , end   :: (Nat, TypeRep b)
+    , end   :: (Nat, SingleType b)
     }
 
 type ArrowPipe a b = Nat -> Pipe a b
@@ -50,7 +51,7 @@ arrowId = arr Id
  where
   leftP  = leftArrow sender
   -- continue with the last node in the lef branch
-  rightP = rightArrow (getMaximum leftP)
+  rightP = rightArrow (endNat leftP)
 
 (<<<) :: (ArrowPipe b c) -> (ArrowPipe a b) -> ArrowPipe a c
 (<<<) = flip (>>>)
@@ -69,18 +70,18 @@ arr (f :: Core (a -> b)) sender = case f of
  where
   receiver = sender + 1
   withNewRole :: Pipe a b
-  withNewRole = Pipe { start = (sender, typeRep)
+  withNewRole = Pipe { start = (sender, singleType)
                      , cont  = procSend
                      , env   = Map.singleton receiver procRecv
-                     , end   = (receiver, typeRep)
+                     , end   = (receiver, singleType)
                      }
   procRecv       = toAProc (recv' sender >>= return . (f :$))
   procSend       = toAProcRTFunc (\x -> send' receiver x)
 
-  withOutNewRole = Pipe { start = (sender, typeRep :: TypeRep a)
+  withOutNewRole = Pipe { start = (sender, singleType :: SingleType a)
                         , cont  = toAProcRTFunc (return . (f :$))
                         , env   = Map.empty
-                        , end   = (sender, typeRep :: TypeRep b)
+                        , end   = (sender, singleType :: SingleType b)
                         }
 
 arrowFirst :: Serialise d => ArrowPipe b c -> ArrowPipe (b, d) (c, d)
@@ -96,7 +97,7 @@ arrowSecond = (arrowId ***)
 (***) leftArrow rightArrow sender = starHelper leftP rightP sender
  where
   leftP      = leftArrow (sender + 1)
-  rightStart = (getMaximum leftP) + 1
+  rightStart = (endNat leftP) + 1
   rightP     = rightArrow rightStart
 
 -- (&&&) :: a b c -> a b c' -> a b (c, c')
@@ -105,7 +106,7 @@ arrowSecond = (arrowId ***)
 (&&&) leftArrow rightArrow sender = andHelper leftP rightP sender
  where
   leftP      = leftArrow (sender + 1)
-  rightStart = (getMaximum leftP) + 1
+  rightStart = (endNat leftP) + 1
   rightP     = rightArrow rightStart
 
 -- (+++)
@@ -113,18 +114,20 @@ arrowSecond = (arrowId ***)
 -- rightStart = sender  (not sneder + 1)
 -- leftStart = rightMax + 1
 (+++)
-  :: (ArrowPipe a c) -> (ArrowPipe b d) -> Nat -> Pipe (Either a b) (Either c d)
+  :: (ArrowPipe a c) -> (ArrowPipe b d) -> ArrowPipe (Either a b) (Either c d)
 (+++) leftArrow rightArrow sender = plusHelper leftP rightP sender
  where
-  rightP = rightArrow (sender + 1)
-  leftP  = leftArrow (1 + getMaximum rightP)
+  leftP  = leftArrow sender
+  rightP = rightArrow sender
+  -- rightP = rightArrow (sender + 1)
+  -- leftP  = leftArrow (1 + getMaximum rightP)
 
 -- (|||)
 (|||) :: (ArrowPipe a c) -> (ArrowPipe b c) -> ArrowPipe (Either a b) c
 (|||) leftArrow rightArrow sender = barHelper leftP rightP sender
  where
-  rightP = rightArrow (sender + 1)
-  leftP  = leftArrow (1 + getMaximum rightP)
+  leftP  = leftArrow sender
+  rightP = rightArrow sender
 
 arrowLeft :: Serialise d => ArrowPipe b c -> ArrowPipe (Either b d) (Either c d)
 arrowLeft = (+++ arrowId)
@@ -159,15 +162,21 @@ runPipe1 role arrowPipe =
   startRole = role + 1
   endRole   = endNat pipe
   pipe      = arrowPipe startRole
-  env       = updateEnvWithSendProcSafe role endRole
-    $ updateEnvWithRecvProc role pipe
+  env =
+    updateEnvWithSendProcSafe role endRole $ updateEnvWithRecvProc role pipe
   toAProcesses procMap = fmap swap $ Map.toList procMap
 
 -- helper function zone
 compose :: Pipe a b -> Pipe b c -> Pipe a c
 compose first@Pipe{} second@Pipe{}
-  | sender == receiver = helper eitherProcOrFunc
-  | otherwise          = error "compose"
+  | sender == receiver
+  = helper eitherProcOrFunc
+  | otherwise
+  = error
+    $  "compose "
+    ++ (show $ fromEnum sender)
+    ++ " "
+    ++ (show $ fromEnum receiver)
  where
   sender           = endNat first
   receiver         = startNat second
@@ -196,6 +205,32 @@ compose first@Pipe{} second@Pipe{}
                                  , env   = mergedEnv
                                  , end   = end second
                                  }
+compose first@Pipe{} second@Pipe{}
+  | sender /= receiver && not isSenderOnlyInProcFunc = Pipe
+    { start = start first
+    , cont  = cont first
+    , env   = newEnv
+    , end   = end second
+    }
+  | sender /= receiver && isSenderOnlyInProcFunc = Pipe
+    { start = start first
+    , cont  = addSendFunc (cont first) receiver
+    , env   = newEnv
+    , end   = end second
+    }
+  | otherwise = undefined
+ where
+  -- assume sender receiver are different for now
+  isSenderOnlyInProcFunc =
+    (isNothing $ Map.lookup sender (env first)) && (sender == startNat first)
+
+  sender    = endNat first
+  receiver  = startNat second
+
+  -- union algorithm when duplicate is to add proc in the right at the end of proc in the left
+  firstEnv  = updateEnvWithSendProcSafe receiver sender (env first)
+  secondEnv = updateEnvWithRecvProc sender second
+  newEnv    = Map.unionWith bind firstEnv secondEnv
 
 -- only did optimization for one cases
 arrowProd
@@ -211,7 +246,7 @@ arrowProd (fl :: Core e -> Core b) fr (leftP@Pipe{} :: Pipe b c) (rightP@Pipe{} 
     c') sender
   = tmpPipe
  where
-  receiver     = (getMaximum rightP) + 1
+  receiver     = rightEndSend + 1
   leftRecv     = startNat leftP
   rightRecv    = startNat rightP
   leftEndSend  = endNat leftP
@@ -221,10 +256,10 @@ arrowProd (fl :: Core e -> Core b) fr (leftP@Pipe{} :: Pipe b c) (rightP@Pipe{} 
     toAProcRTFunc (\x -> send' leftRecv (fl x) >> send' rightRecv (fr x))
 
   -- before mergeing the recvProc command
-  tmpPipe = Pipe { start = (sender, typeRep :: TypeRep e)
+  tmpPipe = Pipe { start = (sender, singleType :: SingleType e)
                  , cont  = procSend
                  , env   = newEnv
-                 , end   = (receiver, typeRep :: TypeRep (c, c'))
+                 , end   = (receiver, singleType :: SingleType (c, c'))
                  }
 
   leftEnv =
@@ -241,40 +276,6 @@ arrowProd (fl :: Core e -> Core b) fr (leftP@Pipe{} :: Pipe b c) (rightP@Pipe{} 
 
   newEnv = Map.insertWith (flip bind) receiver recvProc
     $ Map.unionWith bind leftEnv rightEnv
-arrowProd (fl :: Core e -> Core b) fr (leftP@Pipe{} :: Pipe b c) (rightP@Pipe{} :: Pipe
-    b'
-    c') sender
-  | receiver == rightEndSend && (sender /= receiver)
-  = tmpPipe
-  | otherwise
-  = error "arrowProd"
- where
-  receiver     = getMaximum rightP
-  leftRecv     = startNat leftP
-  rightRecv    = startNat rightP
-  leftEndSend  = endNat leftP
-  rightEndSend = endNat rightP
-
-  procSend =
-    toAProcRTFunc (\x -> send' leftRecv (fl x) >> send' rightRecv (fr x))
-
-  -- before mergeing the recvProc command
-  tmpPipe = Pipe
-    { start = (sender, typeRep :: TypeRep e)
-    , cont  = procSend
-    , env   = Map.update (\x -> Just $ (x `bind4` recvProc)) receiver
-                $ Map.unionWith bind leftEnv rightEnv
-    , end   = (receiver, typeRep :: TypeRep (c, c'))
-    }
-
-  leftEnv =
-    updateEnvWithSendProcSafe receiver leftEndSend
-      $ updateEnvWithRecvProc sender leftP
-  rightEnv = updateEnvWithRecvProc sender rightP
-
-  recvProc = toAProcRTFunc $ \(y :: Core c') -> do
-    x :: Core c <- recv' leftEndSend
-    return (Pair x y)
 
 arrowSum
   :: Serialise e
@@ -287,11 +288,11 @@ arrowSum
 arrowSum (fl :: Core c -> Core e) fr (leftP@Pipe{} :: Pipe a c) (rightP@Pipe{} :: Pipe
     b
     d) sender
-  | receiver == leftEndSend && sender + 1 == rightRecv
-  = Pipe { start = (sender, typeRep)
+  | leftRecv == sender && rightRecv == sender
+  = Pipe { start = (sender, singleType)
          , cont  = procSend
          , env   = newEnv
-         , end   = (receiver, typeRep)
+         , end   = (receiver, singleType)
          }
   | otherwise
   = error "arrowSum"
@@ -300,34 +301,39 @@ arrowSum (fl :: Core c -> Core e) fr (leftP@Pipe{} :: Pipe a c) (rightP@Pipe{} :
   rightRecv    = startNat rightP
   leftEndSend  = endNat leftP
   rightEndSend = endNat rightP
-  receiver     = getMaximum leftP
+  receiver     = sender
 
-  allRole      = Set.toList $ Set.union (getAllRoles leftP) (getAllRoles rightP)
-  procSend     = toAProcRTFunc
-    (\x -> selectMulti' allRole
-                        (x :: Core (Either a b))
-                        (ignoreOutput . send' leftRecv)
-                        (ignoreOutput . send' rightRecv)
-    )
-  applyFl = toAProcRTFunc $ (\x -> return $ fl x)
-  -- since receiver is the same as the leftMax
-  leftEnv =
-    Map.update (\x -> Just $ x `bind4` applyFl) receiver
-      $ updateEnvWithRecvProc sender leftP
-  rightEnv =
-    updateEnvWithSendProcWith fr receiver (endNat rightP)
-      $ updateEnvWithRecvProc sender rightP
+  allRole      = Set.toList $ Set.delete sender $ Set.union (getAllRoles leftP)
+                                                            (getAllRoles rightP)
+
+  (leftCont , oldLeftEnv ) = extractRecvProc leftP
+  (rightCont, oldRightEnv) = extractRecvProc rightP
+
+  applyFl                  = toAProcRTFunc $ (\x -> return $ fl x)
+  applyFr                  = toAProcRTFunc $ (\x -> return $ fr x)
+
+  updateLeftCont           = if leftEndSend == receiver
+    then leftCont `bind3` applyFl
+    else leftCont `bind2` toAProc (recv' leftEndSend :: ProcRT e)
+
+  updateRightCont = if rightEndSend == receiver
+    then rightCont `bind3` applyFr
+    else rightCont `bind2` toAProc (recv' rightEndSend :: ProcRT e)
+
+  procSend = bind5 allRole updateLeftCont updateRightCont
+
+  leftEnv  = if leftEndSend /= receiver
+    then updateEnvWithSendProcWith fl receiver leftEndSend oldLeftEnv
+    else oldLeftEnv
+  rightEnv = if rightEndSend /= receiver
+    then updateEnvWithSendProcWith fr receiver rightEndSend oldRightEnv
+    else oldRightEnv
 
   -- procs that do both branches
   dupEnv = Map.intersectionWith (addBranch sender) leftEnv rightEnv
   -- procs that do action in the left branch, not in the right branch
-  -- the receiver at left right branch is the recv from right end
   newLeftEnv =
-    Map.mapWithKey
-        (\key x -> if key /= receiver
-          then addBranch sender x (toAProc $ return $ Lit ())
-          else addBranch sender x (toAProc $ (recv' rightEndSend :: ProcRT e))
-        )
+    Map.map (\x -> addBranch sender x (toAProc $ return $ Lit ()))
       $ Map.difference leftEnv rightEnv
   -- procs that do action in the right branch, not in the left branch
   newRightEnv =
@@ -427,6 +433,15 @@ endNat = fst . end
 getSendProc :: Nat -> Nat -> Map Nat AProcRT -> AProcRT
 getSendProc receiver sender env = addSend (getProcFromEnv sender env) receiver
 
+extractRecvProc :: Pipe a b -> (AProcRTFunc a, Map Nat AProcRT)
+extractRecvProc p@Pipe {..} = (newAProcRTFunc, newEnv)
+ where
+  (maybeProc, newEnv) =
+    Map.updateLookupWithKey (\_ _ -> Nothing) (startNat p) env
+  newAProcRTFunc = case maybeProc of
+    Just proc -> cont `bind2` proc
+    Nothing   -> cont
+
 getSendProcWith
   :: (Serialise a, Serialise b)
   => (Core a -> Core b)
@@ -488,6 +503,13 @@ bind4 (AProcRT ty proc) (AProcRTFunc ty2 (func :: Core c -> ProcRT b)) =
     Nothing    -> error "AProcRT and AProcRTFunc are not compatible"
   where rep = typeRep :: TypeRep c
 
+bind5 :: [Nat] -> AProcRTFunc a -> AProcRTFunc b -> AProcRTFunc (Either a b)
+bind5 allRole (AProcRTFunc tyl fl) (AProcRTFunc tyr fr) =
+  case tyl `eqTypeRep` tyr of
+    Just HRefl -> toAProcRTFunc (\x -> selectMulti' allRole x fl fr)
+    Nothing    -> toAProcRTFunc
+      (\x -> selectMulti' allRole x (ignoreOutput . fl) (ignoreOutput . fr))
+
 getRecvProcOrFunc :: Pipe a b -> Nat -> Either AProcRT (AProcRTFunc a)
 getRecvProcOrFunc pipe@Pipe {..} receiver =
   case getAProcRTSafe pipe receiver of
@@ -500,7 +522,7 @@ nextRole :: Nat -> Nat
 nextRole x = x + 1
 
 getStartType :: Pipe a b -> SingleType a
-getStartType Pipe {..} = singleType
+getStartType Pipe {..} = snd start
 
 getEndType :: Pipe a b -> SingleType b
-getEndType Pipe {..} = singleType
+getEndType Pipe {..} = snd end

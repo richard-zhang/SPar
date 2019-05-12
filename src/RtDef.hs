@@ -33,7 +33,7 @@ data ProcRTF next where
     Select' :: (Serialise a, Serialise b, Serialise c) => Nat -> Core (Either a b) -> (Core a -> ProcRT c) -> (Core b -> ProcRT c) -> next -> ProcRTF next
     Branch' :: (Serialise c) => Nat -> ProcRT c -> ProcRT c -> next -> ProcRTF next
 
-    SelectMult' :: (Serialise a, Serialise b, Serialise c) => [Nat] -> Core (Either a b) -> (Core a -> ProcRT c) -> (Core b -> ProcRT c) -> next -> ProcRTF next
+    SelectMult' :: (Serialise a, Serialise b, Serialise c) => [Nat] -> Core (Either a b) -> (Core a -> ProcRT c) -> (Core b -> ProcRT c) -> (Core c -> next) -> ProcRTF next
     BranchCont' :: (Serialise c) => Nat -> ProcRT c -> ProcRT c -> (Core c -> next) -> ProcRTF next
 
     Rec' :: Integer -> next -> ProcRTF next
@@ -45,8 +45,8 @@ instance Functor ProcRTF where
     fmap f (Select' r v cont1 cont2 n) = Select' r v cont1 cont2 (f n)
     fmap f (Branch' r left right n   ) = Branch' r left right (f n)
 
-    fmap f (SelectMult' rs v cont1 cont2 n) =
-        SelectMult' rs v cont1 cont2 (f n)
+    fmap f (SelectMult' rs v cont1 cont2 cont) =
+        SelectMult' rs v cont1 cont2 (f . cont)
     fmap f (BranchCont' r left right cont) =
         BranchCont' r left right (f . cont)
 
@@ -110,9 +110,8 @@ selectMulti'
     -> Core (Either a b)
     -> (Core a -> ProcRT c)
     -> (Core b -> ProcRT c)
-    -> ProcRT ()
-selectMulti' rs var cont1 cont2 =
-    liftF $ SelectMult' rs var cont1 cont2 (Lit ())
+    -> ProcRT c
+selectMulti' rs var cont1 cont2 = liftF $ SelectMult' rs var cont1 cont2 id
 
 branchCont' :: Serialise c => Nat -> ProcRT c -> ProcRT c -> ProcRT c
 branchCont' role left right = liftF $ BranchCont' role left right id

@@ -330,13 +330,14 @@ funcBodyHelper cid roles middle end =
 
 entryFunc :: EntryRole a b -> CID -> CID -> CID -> [Nat] -> CFunDef
 entryFunc a@EntryRole {..} sendChan recvChan cid roles = fun
-  [inputDeclSpec]
+  [outputDeclSpec]
   (procName entryRole)
   [decl inputDeclSpec inputVarDeclr]
   funcStats
  where
   inputVarDeclr = (fromString (varName_ $ fromIntegral sendVar)) :: CDeclr
-  inputDeclSpec = CTypeSpec $ stypeToTypeSpec endType
+  inputDeclSpec = CTypeSpec $ stypeToTypeSpec startType
+  outputDeclSpec = CTypeSpec $ stypeToTypeSpec endType
   midBlockItems = fmap instrToCBlock $ toList $ entryRoleToInstr a
                                                                  sendVar
                                                                  recvVar

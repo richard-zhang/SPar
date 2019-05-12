@@ -205,7 +205,9 @@ traverseToCodeGen ps = mapM (uncurry $ helper) ps
                     ]
             restOfInstrs <- helper_ stype next role cxt
             return (instrs Seq.>< restOfInstrs)
-    helper_ stype (Free (SelectMult' receivers (exp :: Core (Either a b)) left right next)) role cxt
+    helper_ stype (Free (SelectMult' receivers (exp :: Core (Either a b)) left (right :: Core
+            b
+        -> ProcRT c) next)) role cxt
         = do
             updateDataStructCollect (singleType :: SingleType (Either a b))
             varEitherName <- freshVarName
@@ -221,10 +223,14 @@ traverseToCodeGen ps = mapM (uncurry $ helper) ps
             varRightVarName <- freshVarName
             let varLeft  = Var $ fromIntegral varLeftVarName :: Core a
             let varRight = Var $ fromIntegral varRightVarName :: Core b
-            leftSeqs <- helper_ singleType (left varLeft) role
-                $ updateIgnore cxt
-            rightSeqs <- helper_ singleType (right varRight) role
-                $ updateIgnore cxt
+            varNameForCont <- freshVarName
+            let varForCont = Var $ fromIntegral varNameForCont :: Core c
+            leftSeqs <-
+                helper_ singleType (left varLeft) role
+                    $ (cxt { ruleForPureCg = RAssign varNameForCont })
+            rightSeqs <-
+                helper_ singleType (right varRight) role
+                    $ (cxt { ruleForPureCg = RAssign varNameForCont })
             let
                 instrs =
                     Seq.fromList
@@ -237,13 +243,14 @@ traverseToCodeGen ps = mapM (uncurry $ helper) ps
                         ++ sendInstrs
                         ++ [ CDecla varLeftVarName  (singleType :: SingleType a)
                            , CDecla varRightVarName (singleType :: SingleType b)
+                           , CDecla varNameForCont  (singleType :: SingleType c)
                            , CSelect varEitherName
                                      varLeftVarName
                                      varRightVarName
                                      leftSeqs
                                      rightSeqs
                            ]
-            restOfInstrs <- helper_ stype next role cxt
+            restOfInstrs <- helper_ stype (next varForCont) role cxt
             return (instrs Seq.>< restOfInstrs)
     helper_ stype (Free (Rec' _ next)) role cxt = do
         restOfInstrs <- helper_ stype next role cxt
