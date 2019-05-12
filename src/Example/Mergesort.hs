@@ -49,7 +49,7 @@ func5 = Prim "test5" undefined :: Core (Int -> ())
 func6 = Prim "test6" undefined :: Core (a -> a)
 
 -- expr = ((arr func) &&& (arr func)) >>> arr func1 >>> arr Fst >>> arr func
-expr = mergeSort 1
+expr = mergeSort 2
 -- val = Lit (3) :: Core (Int)
 val = Lit [1, 2, 4, 3, 2, 1, 10, 1000, 50, 6, 100, 4, 5, 100] :: Core [Int]
 

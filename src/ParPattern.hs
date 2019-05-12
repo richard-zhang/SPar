@@ -301,6 +301,66 @@ arrowSum (fl :: Core c -> Core e) fr (leftP@Pipe{} :: Pipe a c) (rightP@Pipe{} :
   rightRecv    = startNat rightP
   leftEndSend  = endNat leftP
   rightEndSend = endNat rightP
+  receiver     = maximum (leftEndSend, rightEndSend) + 1
+
+  allRole = Set.toList $ Set.delete sender $ Set.insert receiver $ Set.union
+    (getAllRoles leftP)
+    (getAllRoles rightP)
+
+  (leftCont , oldLeftEnv ) = extractRecvProc leftP
+  (rightCont, oldRightEnv) = extractRecvProc rightP
+
+  updateLeftCont           = if leftEndSend == leftRecv
+    then addSendWithFunc fl leftCont receiver
+    else leftCont
+
+  updateRightCont = if rightEndSend == rightRecv
+    then addSendWithFunc fr rightCont receiver
+    else rightCont
+
+  procSend = bind5 allRole updateLeftCont updateRightCont
+
+  procRecv = addBranch sender
+                       (toAProc (recv' leftEndSend :: ProcRT e))
+                       (toAProc (recv' rightEndSend :: ProcRT e))
+
+  leftEnv = if leftEndSend /= leftRecv
+    then updateEnvWithSendProcWith fl receiver leftEndSend oldLeftEnv
+    else oldLeftEnv
+  rightEnv = if rightEndSend /= rightRecv
+    then updateEnvWithSendProcWith fr receiver rightEndSend oldRightEnv
+    else oldRightEnv
+
+  -- procs that do both branches
+  dupEnv = Map.intersectionWith (addBranch sender) leftEnv rightEnv
+  -- procs that do action in the left branch, not in the right branch
+  newLeftEnv =
+    Map.map (\x -> addBranch sender x (toAProc $ return $ Lit ()))
+      $ Map.difference leftEnv rightEnv
+  -- procs that do action in the right branch, not in the left branch
+  newRightEnv =
+    Map.map (\x -> addBranch sender (toAProc $ return $ Lit ()) x)
+      $ Map.difference rightEnv leftEnv
+
+  newEnv = Map.insert receiver procRecv $ Map.union dupEnv $ Map.union
+    newLeftEnv
+    newRightEnv
+arrowSum (fl :: Core c -> Core e) fr (leftP@Pipe{} :: Pipe a c) (rightP@Pipe{} :: Pipe
+    b
+    d) sender
+  | leftRecv == sender && rightRecv == sender
+  = Pipe { start = (sender, singleType)
+         , cont  = procSend
+         , env   = newEnv
+         , end   = (receiver, singleType)
+         }
+  | otherwise
+  = error "arrowSum"
+ where
+  leftRecv     = startNat leftP
+  rightRecv    = startNat rightP
+  leftEndSend  = endNat leftP
+  rightEndSend = endNat rightP
   receiver     = sender
 
   allRole      = Set.toList $ Set.delete sender $ Set.union (getAllRoles leftP)
@@ -406,6 +466,18 @@ addSendWith (f :: Core a -> Core b) (AProcRT (ty :: TypeRep c) proc) receiver =
  where
   rep  = typeRep :: TypeRep a
   rep2 = typeRep :: TypeRep b
+
+addSendWithFunc
+  :: (Serialise a, Serialise b)
+  => (Core a -> Core b)
+  -> AProcRTFunc d
+  -> Nat
+  -> AProcRTFunc d
+addSendWithFunc (f :: Core a -> Core b) (AProcRTFunc (ty :: TypeRep c) procFunc) receiver
+  = case ty `eqTypeRep` rep of
+    Just HRefl -> toAProcRTFunc (procFunc >=> \x -> send' receiver (f x))
+    Nothing    -> error "typed mismatched in addSend"
+  where rep = typeRep :: TypeRep a
 
 getRecvProc :: Nat -> Pipe a b -> AProcRT
 getRecvProc sender p@Pipe {..} = procRecv
