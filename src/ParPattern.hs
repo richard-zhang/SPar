@@ -301,7 +301,7 @@ arrowSum (fl :: Core c -> Core e) fr (leftP@Pipe{} :: Pipe a c) (rightP@Pipe{} :
   rightRecv    = startNat rightP
   leftEndSend  = endNat leftP
   rightEndSend = endNat rightP
-  receiver     = maximum (leftEndSend, rightEndSend) + 1
+  receiver     = maximum (leftEndSend, rightEndSend)
 
   allRole = Set.toList $ Set.delete sender $ Set.insert receiver $ Set.union
     (getAllRoles leftP)
@@ -311,20 +311,16 @@ arrowSum (fl :: Core c -> Core e) fr (leftP@Pipe{} :: Pipe a c) (rightP@Pipe{} :
   (rightCont, oldRightEnv) = extractRecvProc rightP
 
   updateLeftCont           = if leftEndSend == leftRecv
-    then addSendWithFunc fl leftCont receiver
+    then addSendWithFunc fl leftCont receiver leftRecv
     else leftCont
 
   updateRightCont = if rightEndSend == rightRecv
-    then addSendWithFunc fr rightCont receiver
+    then addSendWithFunc fr rightCont receiver leftRecv
     else rightCont
 
   procSend = bind5 allRole updateLeftCont updateRightCont
 
-  procRecv = addBranch sender
-                       (toAProc (recv' leftEndSend :: ProcRT e))
-                       (toAProc (recv' rightEndSend :: ProcRT e))
-
-  leftEnv = if leftEndSend /= leftRecv
+  leftEnv  = if leftEndSend /= leftRecv
     then updateEnvWithSendProcWith fl receiver leftEndSend oldLeftEnv
     else oldLeftEnv
   rightEnv = if rightEndSend /= rightRecv
@@ -335,16 +331,22 @@ arrowSum (fl :: Core c -> Core e) fr (leftP@Pipe{} :: Pipe a c) (rightP@Pipe{} :
   dupEnv = Map.intersectionWith (addBranch sender) leftEnv rightEnv
   -- procs that do action in the left branch, not in the right branch
   newLeftEnv =
-    Map.map (\x -> addBranch sender x (toAProc $ return $ Lit ()))
+    Map.mapWithKey
+        (\key val -> if key == receiver
+          then addBranch sender val (toAProc $ (recv' rightEndSend :: ProcRT e))
+          else addBranch sender val (toAProc $ return $ Lit ())
+        )
       $ Map.difference leftEnv rightEnv
   -- procs that do action in the right branch, not in the left branch
   newRightEnv =
-    Map.map (\x -> addBranch sender (toAProc $ return $ Lit ()) x)
+    Map.mapWithKey
+        (\key val -> if key == receiver
+          then addBranch sender (toAProc $ (recv' leftEndSend :: ProcRT e)) val
+          else addBranch sender (toAProc $ return $ Lit ()) val
+        )
       $ Map.difference rightEnv leftEnv
 
-  newEnv = Map.insert receiver procRecv $ Map.union dupEnv $ Map.union
-    newLeftEnv
-    newRightEnv
+  newEnv = Map.union dupEnv $ Map.union newLeftEnv newRightEnv
 arrowSum (fl :: Core c -> Core e) fr (leftP@Pipe{} :: Pipe a c) (rightP@Pipe{} :: Pipe
     b
     d) sender
@@ -472,11 +474,14 @@ addSendWithFunc
   => (Core a -> Core b)
   -> AProcRTFunc d
   -> Nat
+  -> Nat
   -> AProcRTFunc d
-addSendWithFunc (f :: Core a -> Core b) (AProcRTFunc (ty :: TypeRep c) procFunc) receiver
+addSendWithFunc (f :: Core a -> Core b) (AProcRTFunc (ty :: TypeRep c) procFunc) receiver sender
   = case ty `eqTypeRep` rep of
-    Just HRefl -> toAProcRTFunc (procFunc >=> \x -> send' receiver (f x))
-    Nothing    -> error "typed mismatched in addSend"
+    Just HRefl -> if receiver /= sender
+      then toAProcRTFunc (procFunc >=> \x -> send' receiver (f x))
+      else toAProcRTFunc (procFunc >=> (return . f))
+    Nothing -> error "typed mismatched in addSend"
   where rep = typeRep :: TypeRep a
 
 getRecvProc :: Nat -> Pipe a b -> AProcRT
@@ -544,8 +549,15 @@ updateEnvWithSendProcWith
   -> Nat
   -> Map Nat AProcRT
   -> Map Nat AProcRT
-updateEnvWithSendProcWith f receiver sender env =
-  Map.insert sender (getSendProcWith f receiver sender env) env
+updateEnvWithSendProcWith (f :: Core a -> Core b) receiver sender env
+  | receiver /= sender = Map.insert sender
+                                    (getSendProcWith f receiver sender env)
+                                    env
+  | otherwise = Map.update helper receiver env
+ where
+  helper (AProcRT ty proc) = case ty `eqTypeRep` (typeRep :: TypeRep a) of
+    Just HRefl -> Just $ toAProc (proc >>= (return . f))
+    Nothing    -> error "type not compatible in updateEnvWithSend"
 
 addBranch :: Nat -> AProcRT -> AProcRT -> AProcRT
 addBranch sender (AProcRT (tyl :: TypeRep a) procl) (AProcRT (tyr :: TypeRep b) procr)
