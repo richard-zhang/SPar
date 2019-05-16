@@ -19,10 +19,7 @@ import           Control.Monad.Indexed
 import qualified Control.Monad.Indexed.Free    as F
 import           Data.Kind
 import           Data.Singletons
-import           Data.Type.Natural              ( Nat
-                                                , snat
-                                                , ZSym0
-                                                )
+import           Data.Type.Natural              ( Nat )
 import           Language.Poly.Core             ( Core(..)
                                                 , Serialise
                                                 )
@@ -106,54 +103,3 @@ type family ExtractInfo procs :: [(SType * *, Nat)] where
 
 type family ExtractProcessInfo (c :: *) :: (SType * *, Nat) where
     ExtractProcessInfo (Process k _) = k
-
-test = do
-    send [snat|1|] (Lit 10 :: Core Int)
-    -- _x :: Core Integer <- recv [snat|1|]
-    x :: Core (Either () ()) <- recv [snat|1|]
-    select [snat|2|]
-           x
-           (\_ -> recv [snat|2|])
-           (\_ -> send [snat|2|] (Lit 30 :: Core Int))
-    return Unit
-
-test1 = do
-    x :: Core Int <- recv [snat|0|]
-    send [snat|0|] (Lit (Left () :: Either () ()))
-    return Unit
-
--- rbad = do
---     x :: Core Integer <- recv [snat|0|]
---     rbad
-
-test2 = branch [snat|0|] (send [snat|0|] (Lit 20 :: Core Int)) (recv [snat|0|])
-
-test3 = select [snat|2|]
-               (Lit (Right () :: Either () ()))
-               (\_ -> recv [snat|2|])
-               (\_ -> send [snat|2|] (Lit 30 :: Core Int))
-
-p0 = Process [snat|0|] test
-p1 = Process [snat|1|] test1
-p2 = Process [snat|2|] test2
-p3 = Process [snat|0|] test3
-ps = PCons p0 (PCons p1 (PCons p2 PNil))
-
-ps2 = PCons p2 (PCons p3 PNil)
-
-cgTest0 = send [snat|1|] (Lit 10 :: Core Int)
-
-cgTest1 = do
-    x :: Core Int <- recv [snat|0|]
-    return x
-
-pcg0 = Process [snat|0|] cgTest0
-pcg1 = Process [snat|1|] cgTest1
-
--- cglist = PCons pcg0 (PCons pcg1 PNil)
-
-hello :: DualityCons xs => PList xs -> String
-hello _ = "f"
-
-gk :: String
-gk = hello ps

@@ -335,14 +335,14 @@ entryFunc a@EntryRole {..} sendChan recvChan cid roles = fun
   [decl inputDeclSpec inputVarDeclr]
   funcStats
  where
-  inputVarDeclr = (fromString (varName_ $ fromIntegral sendVar)) :: CDeclr
-  inputDeclSpec = CTypeSpec $ stypeToTypeSpec startType
+  inputVarDeclr  = (fromString (varName_ $ fromIntegral sendVar)) :: CDeclr
+  inputDeclSpec  = CTypeSpec $ stypeToTypeSpec startType
   outputDeclSpec = CTypeSpec $ stypeToTypeSpec endType
-  midBlockItems = fmap instrToCBlock $ toList $ entryRoleToInstr a
-                                                                 sendVar
-                                                                 recvVar
-                                                                 sendChan
-                                                                 recvChan
+  midBlockItems  = fmap instrToCBlock $ toList $ entryRoleToInstr a
+                                                                  sendVar
+                                                                  recvVar
+                                                                  sendChan
+                                                                  recvChan
 
   endBlockItems   = [CBlockStmt $ creturn $ varName (fromIntegral recvVar)]
   wholeBlockItmes = funcBodyHelper cid roles midBlockItems endBlockItems
@@ -465,6 +465,9 @@ labelField = CDecl [defTy "Label"]
                    [(Just $ fromString "label", Nothing, Nothing)]
                    undefNode
 
+swapChanKey :: ChanKey -> ChanKey
+swapChanKey key =
+  ChanKey { chanCreator = chanDestroyer key, chanDestroyer = chanCreator key }
 ---- HACK ZONE UNSAFE
 debugFlag :: IORef Bool
 debugFlag = unsafePerformIO (newIORef False)

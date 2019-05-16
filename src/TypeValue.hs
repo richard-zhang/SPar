@@ -32,11 +32,11 @@ projectHelper a b = if liftEq (\_ _ -> True) a b
 
 dual :: STypeV a -> Nat -> STypeV a
 dual (Pure b            ) _  = Pure b
-dual (Free (S r0 v next)) r1 = Free (R r1 v (dual next r1))
-dual (Free (R r0 v next)) r1 = Free (S r1 v (dual next r1))
-dual (Free (B r0 next1 next2 next)) r1 =
+dual (Free (S _r0 v next)) r1 = Free (R r1 v (dual next r1))
+dual (Free (R _r0 v next)) r1 = Free (S r1 v (dual next r1))
+dual (Free (B _r0 next1 next2 next)) r1 =
   Free (Se r1 (dual next1 r1) (dual next2 r1) (dual next r1))
-dual (Free (Se r0 next1 next2 next)) r1 =
+dual (Free (Se _r0 next1 next2 next)) r1 =
   Free (B r1 (dual next1 r1) (dual next2 r1) (dual next r1))
 
 dualityC :: Eq c => [(STypeV c, Nat)] -> Bool

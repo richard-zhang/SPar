@@ -44,6 +44,7 @@ instance Show ObservableAction where
 
 serialize :: (Serialise a) => Core a -> String
 serialize (Lit a) = show a
+serialize _ = undefined
 
 deserialize :: (Serialise a) => String -> Core a
 deserialize = Lit . read
@@ -53,7 +54,7 @@ normalEval []       = return ()
 normalEval (x : xs) = normalEval' x xs
 
 normalEval' :: ProcessRT () -> [ProcessRT ()] -> Gs
-normalEval' (Pure _                       , role) xs = normalEval xs
+normalEval' (Pure _                       , _role) xs = normalEval xs
 normalEval' (Free (Send' receiver value n), role) xs = do
     env <- get
     put
@@ -115,6 +116,7 @@ normalEval' act@(Free (Branch' sender left right next), role) xs = do
                    ]
                 )
         _ -> normalEval $ xs ++ [act]
+normalEval' _ _ = undefined
 
 eval' :: [ProcessRT ()] -> IO [ObservableAction]
 eval' xs = snd <$> runWriterT (runStateT (normalEval xs) (initialEnv xs))

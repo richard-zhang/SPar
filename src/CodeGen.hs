@@ -5,7 +5,6 @@
 {-# LANGUAGE GADTs #-}
 module CodeGen where
 import           Control.Monad.Free
-import           Control.Monad.Identity
 import           Control.Monad.IO.Class
 import           Data.Sequence                  ( Seq )
 import qualified Data.Sequence                 as Seq
@@ -81,7 +80,7 @@ traverseToCodeGen ps = mapM (uncurry $ helper) ps
     debug = (liftIO . putStrLn . show)
 
     -- helper :: MonadIO m => SingleType a -> ProcRT a -> Nat -> CodeGen m (Nat, Seq Instr)
-    helper (AProcRT typeRep process) role =
+    helper (AProcRT _ process) role =
         fmap (role, ) $ helper_ singleType process role defaultContext
 
     -- TODO very inefficient way to update data struct collects update on every send, select and pure
@@ -92,50 +91,40 @@ traverseToCodeGen ps = mapM (uncurry $ helper) ps
         -> Nat
         -> ExtraContext
         -> CodeGen m (Seq Instr)
-    helper_ stype (Pure (exp :: Core a)) _ cxt@ExtraContext {..} = do
+    helper_ stype (Pure (expr :: Core a)) _ ExtraContext {..} = do
         updateDataStructCollect stype
         return $ case ruleForPureCg of
-            RReturn         -> Seq.singleton (CEnd (Exp exp stype))
-            RAssign varName -> Seq.singleton (CAssgn varName $ Exp exp stype)
-            RIgnore         -> Seq.empty
-    helper_ stype (Free (Send' receiver (exp :: Core a) next)) role cxt = do
+            RReturn       -> Seq.singleton (CEnd (Exp expr stype))
+            RAssign varId -> Seq.singleton (CAssgn varId $ Exp expr stype)
+            RIgnore       -> Seq.empty
+    helper_ stype (Free (Send' receiver (expr :: Core a) next)) role cxt = do
         updateDataStructCollect (singleType :: SingleType a)
-        let chanKey = ChanKey { chanCreator = role, chanDestroyer = receiver }
-        cid <- getChannelAndUpdateChanTable2 chanKey role
-        let chan = Channel cid (singleType :: SingleType a)
-        varName <- freshVarName
-        let var = Var $ fromIntegral varName
+        chan         <- getChannel role receiver
+        (varId, var) <- getNewVar
         let instrs = Seq.fromList
-                [ CDecla varName (singleType :: SingleType a)
-                , CAssgn varName (Exp exp singleType)
-                , CSend chan (Exp var singleType)
+                [ CDecla varId (singleType :: SingleType a)
+                , CAssgn varId (Exp expr singleType)
+                , CSend chan (Exp var (singleType :: SingleType a))
                 ]
         restOfInstrs <- helper_ stype next role cxt
         return (instrs Seq.>< restOfInstrs)
     helper_ stype (Free (Recv' sender (cont :: Core a -> ProcRT a1))) role cxt
         = do
-            let chanKey =
-                    ChanKey { chanCreator = sender, chanDestroyer = role }
-            cid <- getChannelAndUpdateChanTable2 chanKey role
-            let chan = Channel cid (singleType :: SingleType a)
-            varName <- freshVarName
-            let var = Var (fromIntegral varName)
+            chan         <- getChannel sender role
+            (varId, var) <- getNewVar
             let instrs = Seq.fromList
-                    [ CDecla varName (singleType :: SingleType a)
+                    [ CDecla varId (singleType :: SingleType a)
                     , CRecv chan (Exp var singleType)
                     ]
             restOfInstrs <- helper_ stype (cont var) role cxt
             return (instrs Seq.>< restOfInstrs)
     helper_ stype (Free (Branch' sender left right next)) role cxt = do
-        let chanKey = ChanKey { chanCreator = sender, chanDestroyer = role }
-        cid <- getChannelAndUpdateChanTable2 chanKey role
-        let chan = Channel cid singleTypeLabel
-        varName <- freshVarName
-        let var = Var $ fromIntegral varName :: Core Label
-        leftSeqs  <- helper_ singleType left role $ updateIgnore cxt
-        rightSeqs <- helper_ singleType right role $ updateIgnore cxt
+        chan         <- getChannel sender role
+        (varId, var) <- getNewVar
+        leftSeqs     <- helper_ singleType left role $ updateIgnore cxt
+        rightSeqs    <- helper_ singleType right role $ updateIgnore cxt
         let instrs = Seq.fromList
-                [ CDecla varName singleTypeLabel
+                [ CDecla varId singleTypeLabel
                 , CRecv chan (Exp var singleTypeLabel)
                 , CBranch (Exp var singleTypeLabel) leftSeqs rightSeqs
                 ]
@@ -143,15 +132,10 @@ traverseToCodeGen ps = mapM (uncurry $ helper) ps
         return (instrs Seq.>< restOfInstrs)
     helper_ stype (Free (BranchCont' sender left (right :: ProcRT c) cont)) role cxt
         = do
-            let chanKey =
-                    ChanKey { chanCreator = sender, chanDestroyer = role }
-            cid <- getChannelAndUpdateChanTable2 chanKey role
-            let chan = Channel cid singleTypeLabel
-            varName <- freshVarName
-            let var = Var $ fromIntegral varName :: Core Label
-            varNameForCont <- freshVarName
-            let varForCont = Var $ fromIntegral varNameForCont :: Core c
-            leftSeqs <- helper_
+            chan                         <- getChannel sender role
+            (varId         , var       ) <- getNewVar
+            (varNameForCont, varForCont) <- getNewVar
+            leftSeqs                     <- helper_
                 singleType
                 left
                 role
@@ -163,26 +147,20 @@ traverseToCodeGen ps = mapM (uncurry $ helper) ps
                 (cxt { ruleForPureCg = RAssign varNameForCont })
             let instrs = Seq.fromList
                     [ CDecla varNameForCont (singleType :: SingleType c)
-                    , CDecla varName        singleTypeLabel
+                    , CDecla varId          singleTypeLabel
                     , CRecv chan (Exp var singleTypeLabel)
                     , CBranch (Exp var singleTypeLabel) leftSeqs rightSeqs
                     ]
             restOfInstrs <- helper_ stype (cont varForCont) role cxt
             return (instrs Seq.>< restOfInstrs)
-    helper_ stype (Free (Select' receiver (exp :: Core (Either a b)) left right next)) role cxt
+    helper_ stype (Free (Select' receiver (expr :: Core (Either a b)) left right next)) role cxt
         = do
             updateDataStructCollect (singleType :: SingleType (Either a b))
-            varEitherName <- freshVarName
-            let chanKey =
-                    ChanKey { chanCreator = role, chanDestroyer = receiver }
-            cid <- getChannelAndUpdateChanTable2 chanKey role
-            let chan = Channel cid singleTypeLabel
-            varLabelName <- freshVarName
-            let varLabel = Var $ fromIntegral varLabelName :: Core Label
-            varLeftVarName  <- freshVarName
-            varRightVarName <- freshVarName
-            let varLeft  = Var $ fromIntegral varLeftVarName :: Core a
-            let varRight = Var $ fromIntegral varRightVarName :: Core b
+            chan                        <- getChannel role receiver
+            (varEitherName  , _       ) <- getNewVar
+            (varLabelName   , varLabel) <- getNewVar
+            (varLeftVarName , varLeft ) <- getNewVar
+            (varRightVarName, varRight) <- getNewVar
             leftSeqs <- helper_ singleType (left varLeft) role
                 $ updateIgnore cxt
             rightSeqs <- helper_ singleType (right varRight) role
@@ -191,7 +169,7 @@ traverseToCodeGen ps = mapM (uncurry $ helper) ps
                 instrs = Seq.fromList
                     [ CDecla varEitherName
                              (singleType :: SingleType (Either a b))
-                    , CAssgn varEitherName $ Exp exp singleType
+                    , CAssgn varEitherName $ Exp expr singleType
                     , CDecla varLabelName singleTypeLabel
                     , CEither2Label varEitherName varLabelName
                     , CSend chan (Exp varLabel singleTypeLabel)
@@ -205,26 +183,22 @@ traverseToCodeGen ps = mapM (uncurry $ helper) ps
                     ]
             restOfInstrs <- helper_ stype next role cxt
             return (instrs Seq.>< restOfInstrs)
-    helper_ stype (Free (SelectMult' receivers (exp :: Core (Either a b)) left (right :: Core
+    helper_ stype (Free (SelectMult' receivers (expr :: Core (Either a b)) left (right :: Core
             b
         -> ProcRT c) next)) role cxt
         = do
             updateDataStructCollect (singleType :: SingleType (Either a b))
-            varEitherName <- freshVarName
-            varLabelName  <- freshVarName
-            let varLabel = Var $ fromIntegral varLabelName :: Core Label
-            sendInstrs <- mapM
+            (varEitherName  , _         ) <- getNewVar
+            (varLabelName   , varLabel  ) <- getNewVar
+            (varLeftVarName , varLeft   ) <- getNewVar
+            (varRightVarName, varRight  ) <- getNewVar
+            (varNameForCont , varForCont) <- getNewVar
+            sendInstrs                    <- mapM
                 (getSendValueChanInstr (Exp varLabel singleTypeLabel)
                                        singleTypeLabel
                                        role
                 )
                 receivers
-            varLeftVarName  <- freshVarName
-            varRightVarName <- freshVarName
-            let varLeft  = Var $ fromIntegral varLeftVarName :: Core a
-            let varRight = Var $ fromIntegral varRightVarName :: Core b
-            varNameForCont <- freshVarName
-            let varForCont = Var $ fromIntegral varNameForCont :: Core c
             leftSeqs <-
                 helper_ singleType (left varLeft) role
                     $ (cxt { ruleForPureCg = RAssign varNameForCont })
@@ -236,7 +210,7 @@ traverseToCodeGen ps = mapM (uncurry $ helper) ps
                     Seq.fromList
                         $  [ CDecla varEitherName
                                     (singleType :: SingleType (Either a b))
-                           , CAssgn varEitherName $ Exp exp singleType
+                           , CAssgn varEitherName $ Exp expr singleType
                            , CDecla varLabelName singleTypeLabel
                            , CEither2Label varEitherName varLabelName
                            ]
@@ -255,25 +229,16 @@ traverseToCodeGen ps = mapM (uncurry $ helper) ps
     helper_ stype (Free (Rec' _ next)) role cxt = do
         restOfInstrs <- helper_ stype next role cxt
         return restOfInstrs
-    helper_ stype (Free (Mu' _)) role cxt = return $ Seq.singleton $ CRec role
+    helper_ _stype (Free (Mu' _)) role _cxt =
+        return $ Seq.singleton $ CRec role
     helper_ stype (Free (ForcedEval' (val :: Core a) cont)) role cxt = do
-        varName <- freshVarName
-        let var = Var $ fromIntegral varName
+        (varId, var) <- getNewVar
         let instrs = Seq.fromList
-                [ CDecla varName (singleType :: SingleType a)
-                , CAssgn varName $ Exp val singleType
+                [ CDecla varId (singleType :: SingleType a)
+                , CAssgn varId $ Exp val singleType
                 ]
         restOfInstrs <- helper_ stype (cont var) role cxt
         return $ instrs Seq.>< restOfInstrs
 
     updateCxt rule a = a { ruleForPureCg = rule }
     updateIgnore = updateCxt RIgnore
-
-    getSendValueChanInstr
-        :: Monad m => Exp a -> SingleType a -> Nat -> Nat -> CodeGen m Instr
-    getSendValueChanInstr exp sType sender receiver = do
-        let chanKey =
-                ChanKey { chanCreator = sender, chanDestroyer = receiver }
-        cid <- getChannelAndUpdateChanTable2 chanKey sender
-        let chan = Channel cid sType
-        return $ CSend chan exp

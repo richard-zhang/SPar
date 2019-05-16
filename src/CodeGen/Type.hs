@@ -13,7 +13,7 @@ import           Data.Typeable
 import           Data.List
 import           Foreign.Storable               ( Storable )
 
-type Serialise a = (Repr a, Show a, Read a, Typeable a)
+type Serialise a = (Repr a, Show a, Read a)
 
 -- need to find a way to represent recursive single type 
 data SingleType a where

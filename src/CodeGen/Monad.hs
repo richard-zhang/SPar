@@ -4,27 +4,24 @@
 {-# LANGUAGE RankNTypes        #-}
 {-# LANGUAGE GADTs        #-}
 module CodeGen.Monad where
-import           Control.Monad.Identity
 import           Control.Monad.State
-import           Control.Monad.IO.Class
 import           Data.Map                       ( Map )
 import qualified Data.Map                      as Map
 import           Data.Set                       ( Set )
 import qualified Data.Set                      as Set
 import           Data.Maybe
 import           Data.Sequence                  ( Seq )
-import qualified Data.Sequence                 as Seq
 import           Data.Type.Natural
 import           Language.C              hiding ( setFlag )
 import           System.IO.Unsafe
 
 import           CodeGen.Data
 import           CodeGen.Type
+import           Language.Poly.Core
 
 data CodeGenState = CodeGenState
   {
     newChanTable :: Map ChanKey CID,
-    chanTable :: Map ChanKey (Seq CID),
     flagTable :: Map ChanKey Nat, -- flag to indiciate which process is encountered first in the code generation
     varNext   :: Int,
     chanNext  :: CID,
@@ -96,8 +93,7 @@ codeGenCombined instrs st = CTranslUnit
     funcsCaller = fmap (CFDefExt . pthreadFunc . fst) instrs
 
 initCodeGenState :: CodeGenState
-initCodeGenState = CodeGenState { chanTable         = Map.empty
-                                , flagTable         = Map.empty
+initCodeGenState = CodeGenState { flagTable         = Map.empty
                                 , varNext           = 0
                                 , chanNext          = 1
                                 , dataStructCollect = Set.empty
@@ -112,43 +108,12 @@ freshVarName :: Monad m => CodeGen m Int
 freshVarName =
     state $ \s@CodeGenState {..} -> (varNext, s { varNext = varNext + 1 })
 
-addChanNameToChanTable :: Monad m => ChanKey -> CID -> CodeGen m CID
-addChanNameToChanTable key value = state $ \s@CodeGenState {..} ->
-    ( value
-    , s
-        { chanTable = Map.insertWith (flip (Seq.><))
-                                     key
-                                     (Seq.singleton value)
-                                     chanTable
-        }
-    )
-
-createAndAddChannel :: Monad m => ChanKey -> CodeGen m CID
-createAndAddChannel key = freshChanName >>= addChanNameToChanTable key
-
 createAndAddChannel2 :: Monad m => ChanKey -> CodeGen m CID
-createAndAddChannel2 key = freshChanName >>= helper key
+createAndAddChannel2 key = freshChanName >>= helper
   where
-    helper :: Monad m => ChanKey -> CID -> CodeGen m CID
-    helper key value = state $ \s@CodeGenState {..} ->
+    helper :: Monad m => CID -> CodeGen m CID
+    helper value = state $ \s@CodeGenState {..} ->
         (value, s { newChanTable = Map.insert key value newChanTable })
-
-getAndDropChannel :: Monad m => ChanKey -> CodeGen m CID
-getAndDropChannel key = do
-    codeGenState <- get
-    let table = chanTable codeGenState
-    -- TODO use pattern matching to get the first element
-    let cid   = Seq.index (fromJust $ Map.lookup key table) 0
-    put (codeGenState { chanTable = Map.update (Just . Seq.drop 1) key table })
-    return cid
-
-checkChannelListNull :: Monad m => ChanKey -> CodeGen m Bool
-checkChannelListNull key = do
-    codeGenState <- get
-    let table = chanTable codeGenState
-    case Map.lookup key table of
-        Just xs -> return $ Seq.null xs
-        Nothing -> return True
 
 setFlag :: Monad m => ChanKey -> Nat -> CodeGen m Nat
 setFlag key value = state $ \s@CodeGenState {..} ->
@@ -162,19 +127,11 @@ getFlagOrSetFlag key value = do
         Just a  -> return a
         Nothing -> setFlag key value
 
-getChannelAndUpdateChanTable :: Monad m => ChanKey -> Nat -> CodeGen m CID
-getChannelAndUpdateChanTable key role = do
-    flag <- getFlagOrSetFlag key role
-    cid  <- if flag == role
-        then createAndAddChannel key
-        else getAndDropChannel key
-    return cid
-
 getChannelAndUpdateChanTable2 :: Monad m => ChanKey -> Nat -> CodeGen m CID
 getChannelAndUpdateChanTable2 key _ = do
     codeGenState <- get
-    let map    = newChanTable codeGenState
-    let result = Map.lookup key map
+    let chanTable    = newChanTable codeGenState
+    let result = Map.lookup key chanTable
     case result of
         Just cid -> return cid
         Nothing  -> createAndAddChannel2 key
@@ -197,11 +154,23 @@ updateDataStructCollect stype = case stype of
             }
         )
 
--- debugging purpose
-getSeqChan :: Monad m => ChanKey -> CodeGen m (Seq CID)
-getSeqChan key = do
-    codeGenState <- get
-    let maybeSeq = Map.lookup key $ chanTable codeGenState
-    return $ case maybeSeq of
-        Just seq -> seq
-        Nothing  -> Seq.empty
+getNewVar :: Monad m => CodeGen m (Int, Core a)
+getNewVar = do
+    varId <- freshVarName
+    return (varId, Var $ fromIntegral varId)
+
+getChannel :: (Monad m, Repr a) => Nat -> Nat -> CodeGen m (Channel a)
+getChannel sender receiver = do
+    let chanKey = ChanKey { chanCreator = sender, chanDestroyer = receiver }
+    cid <- getChannelAndUpdateChanTable2 chanKey receiver
+    return $ Channel cid singleType
+    
+
+getSendValueChanInstr
+    :: Monad m => Exp a -> SingleType a -> Nat -> Nat -> CodeGen m Instr
+getSendValueChanInstr expr sType sender receiver = do
+    let chanKey =
+            ChanKey { chanCreator = sender, chanDestroyer = receiver }
+    cid <- getChannelAndUpdateChanTable2 chanKey sender
+    let chan = Channel cid sType
+    return $ CSend chan expr

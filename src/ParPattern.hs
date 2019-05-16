@@ -68,16 +68,6 @@ arr (f :: Core (a -> b)) sender = case f of
   Id  -> withOutNewRole
   _   -> withOutNewRole
  where
-  receiver = sender + 1
-  withNewRole :: Pipe a b
-  withNewRole = Pipe { start = (sender, singleType)
-                     , cont  = procSend
-                     , env   = Map.singleton receiver procRecv
-                     , end   = (receiver, singleType)
-                     }
-  procRecv       = toAProc (recv' sender >>= return . (f :$))
-  procSend       = toAProcRTFunc (\x -> send' receiver x)
-
   withOutNewRole = Pipe { start = (sender, singleType :: SingleType a)
                         , cont  = toAProcRTFunc (return . (f :$))
                         , env   = Map.empty

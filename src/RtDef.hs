@@ -52,8 +52,8 @@ instance Functor ProcRTF where
     fmap f (BranchCont' r left right cont) =
         BranchCont' r left right (f . cont)
 
-    fmap f (Rec' var n) = Rec' var (f n)
-    fmap _ (Mu' var   ) = Mu' var
+    fmap f (Rec' var n          ) = Rec' var (f n)
+    fmap _ (Mu' var             ) = Mu' var
     fmap f (ForcedEval' val cont) = ForcedEval' val (f . cont)
 
 -- type ProcRT a = Free ProcRTF (Core a)
@@ -129,12 +129,12 @@ ignoreOutput :: ProcRT a -> ProcRT ()
 ignoreOutput = (>> return (Lit ()))
 
 convert :: Integer -> ProcRT a -> STypeV ()
-convert _ (Pure a) = Pure ()
+convert _ (Pure _) = Pure ()
 convert n (Free (Send' r v next)) =
     Free (S r (T.typeRep $ extractType v) $ convert n next)
 convert n (Free (Recv' r cont)) = Free
     (R r (T.typeRep $ extractParamType cont) $ convert (n + 1) (cont $ Var n))
-convert n (Free (Select' r v cont1 cont2 next)) = Free
+convert n (Free (Select' r _ cont1 cont2 next)) = Free
     (Se r
         (convert 1 (cont1 $ Var 0))
         (convert 1 (cont2 $ Var 0))
@@ -144,6 +144,7 @@ convert n (Free (Branch' r left right next)) =
     Free (B r (convert 0 left) (convert 0 right) (convert n next))
 convert n (Free (BranchCont' r left right cont)) = Free
     (B r (convert 0 left) (convert 0 right) $ convert (n + 1) (cont $ Var n))
+convert _ _ = undefined
 
 eraseSessionInfo' :: Proc' i j a -> ProcRT a
 eraseSessionInfo' (F.Pure v) = Pure v
@@ -190,6 +191,7 @@ withProcRT (Free (Recv' n next)) f = withProcRT (next $ Var 0) $ \info cont ->
         SomeSing role -> f (SRecv role (extractParamType next) info)
                            (F.Free (Recv role (const cont)))
 withProcRT (Pure v :: ProcRT a) f = f (SPure $ Proxy @a) (F.Pure v)
+withProcRT _                    _ = undefined
 
 data SomeTypingInfo where
     SomeTypingInfo :: Sing (r :: Nat) -> Sing (n :: SType * *) -> SomeTypingInfo
