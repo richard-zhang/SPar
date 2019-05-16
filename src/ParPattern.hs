@@ -96,18 +96,18 @@ arrowSecond = (arrowId ***)
 (***) :: (ArrowPipe b c) -> (ArrowPipe b' c') -> ArrowPipe (b, b') (c, c')
 (***) leftArrow rightArrow sender = starHelper leftP rightP sender
  where
-  leftP      = leftArrow (sender + 1)
-  rightStart = (endNat leftP) + 1
-  rightP     = rightArrow rightStart
+  leftP      = leftArrow rightStart
+  rightStart = (endNat rightP) + 1
+  rightP     = rightArrow sender
 
 -- (&&&) :: a b c -> a b c' -> a b (c, c')
 (&&&) :: (ArrowPipe b c) -> (ArrowPipe b c') -> ArrowPipe b (c, c')
 -- (&&&) leftArrow rightArrow sender receiver = undefined
 (&&&) leftArrow rightArrow sender = andHelper leftP rightP sender
  where
-  leftP      = leftArrow (sender + 1)
-  rightStart = (endNat leftP) + 1
-  rightP     = rightArrow rightStart
+  leftP      = leftArrow rightStart
+  rightStart = (endNat rightP) + 1
+  rightP     = rightArrow sender
 
 -- (+++)
 -- notice the difference is we start with the right one
@@ -205,34 +205,7 @@ compose first@Pipe{} second@Pipe{}
                                  , env   = mergedEnv
                                  , end   = end second
                                  }
-compose first@Pipe{} second@Pipe{}
-  | sender /= receiver && not isSenderOnlyInProcFunc = Pipe
-    { start = start first
-    , cont  = cont first
-    , env   = newEnv
-    , end   = end second
-    }
-  | sender /= receiver && isSenderOnlyInProcFunc = Pipe
-    { start = start first
-    , cont  = addSendFunc (cont first) receiver
-    , env   = newEnv
-    , end   = end second
-    }
-  | otherwise = undefined
- where
-  -- assume sender receiver are different for now
-  isSenderOnlyInProcFunc =
-    (isNothing $ Map.lookup sender (env first)) && (sender == startNat first)
 
-  sender    = endNat first
-  receiver  = startNat second
-
-  -- union algorithm when duplicate is to add proc in the right at the end of proc in the left
-  firstEnv  = updateEnvWithSendProcSafe receiver sender (env first)
-  secondEnv = updateEnvWithRecvProc sender second
-  newEnv    = Map.unionWith bind firstEnv secondEnv
-
--- only did optimization for one cases
 arrowProd
   :: Serialise e
   => (Core e -> Core b)
@@ -246,36 +219,38 @@ arrowProd (fl :: Core e -> Core b) fr (leftP@Pipe{} :: Pipe b c) (rightP@Pipe{} 
     c') sender
   = tmpPipe
  where
-  receiver     = rightEndSend + 1
-  leftRecv     = startNat leftP
+  receiver     = leftEndSend
   rightRecv    = startNat rightP
+  leftRecv     = startNat leftP
   leftEndSend  = endNat leftP
   rightEndSend = endNat rightP
 
-  procSend =
-    toAProcRTFunc (\x -> send' leftRecv (fl x) >> send' rightRecv (fr x))
+  tmpPipe      = Pipe { start = (sender, singleType :: SingleType e)
+                      , cont  = procSend
+                      , env   = newEnv
+                      , end   = (receiver, singleType :: SingleType (c, c'))
+                      }
 
-  -- before mergeing the recvProc command
-  tmpPipe = Pipe { start = (sender, singleType :: SingleType e)
-                 , cont  = procSend
-                 , env   = newEnv
-                 , end   = (receiver, singleType :: SingleType (c, c'))
-                 }
+  (procFunc, newRightEnv) = extractRecvProc rightP
+  updateProcFunc          = if rightEndSend == rightRecv
+    then addSendFunc procFunc receiver
+    else procFunc
+
+  procSend =
+    (toAProcRTFunc (\x -> send' leftRecv (fl x) >> return (fr x)))
+      `bind3` updateProcFunc
 
   leftEnv =
-    updateEnvWithSendProcSafe receiver leftEndSend
+    Map.update (\x -> Just $ x `bind4` recvProc) receiver
       $ updateEnvWithRecvProc sender leftP
-  rightEnv =
-    updateEnvWithSendProcSafe receiver rightEndSend
-      $ updateEnvWithRecvProc sender rightP
+  rightEnv = updateEnvWithSendProcSafe receiver rightEndSend $ newRightEnv
 
-  recvProc = toAProc $ do
-    x :: Core c  <- recv' leftEndSend
+  recvProc = toAProcRTFunc $ \x -> do
+    x'           <- forcedEval' x
     y :: Core c' <- recv' rightEndSend
-    return (Pair x y)
+    return ((Pair x' y) :: Core (c, c'))
 
-  newEnv = Map.insertWith (flip bind) receiver recvProc
-    $ Map.unionWith bind leftEnv rightEnv
+  newEnv = Map.unionWith bind leftEnv rightEnv
 
 arrowSum
   :: Serialise e
@@ -344,62 +319,6 @@ arrowSum (fl :: Core c -> Core e) fr (leftP@Pipe{} :: Pipe a c) (rightP@Pipe{} :
           then addBranch sender (toAProc $ (recv' leftEndSend :: ProcRT e)) val
           else addBranch sender (toAProc $ return $ Lit ()) val
         )
-      $ Map.difference rightEnv leftEnv
-
-  newEnv = Map.union dupEnv $ Map.union newLeftEnv newRightEnv
-arrowSum (fl :: Core c -> Core e) fr (leftP@Pipe{} :: Pipe a c) (rightP@Pipe{} :: Pipe
-    b
-    d) sender
-  | leftRecv == sender && rightRecv == sender
-  = Pipe { start = (sender, singleType)
-         , cont  = procSend
-         , env   = newEnv
-         , end   = (receiver, singleType)
-         }
-  | otherwise
-  = error "arrowSum"
- where
-  leftRecv     = startNat leftP
-  rightRecv    = startNat rightP
-  leftEndSend  = endNat leftP
-  rightEndSend = endNat rightP
-  receiver     = sender
-
-  allRole      = Set.toList $ Set.delete sender $ Set.union (getAllRoles leftP)
-                                                            (getAllRoles rightP)
-
-  (leftCont , oldLeftEnv ) = extractRecvProc leftP
-  (rightCont, oldRightEnv) = extractRecvProc rightP
-
-  applyFl                  = toAProcRTFunc $ (\x -> return $ fl x)
-  applyFr                  = toAProcRTFunc $ (\x -> return $ fr x)
-
-  updateLeftCont           = if leftEndSend == receiver
-    then leftCont `bind3` applyFl
-    else leftCont `bind2` toAProc (recv' leftEndSend :: ProcRT e)
-
-  updateRightCont = if rightEndSend == receiver
-    then rightCont `bind3` applyFr
-    else rightCont `bind2` toAProc (recv' rightEndSend :: ProcRT e)
-
-  procSend = bind5 allRole updateLeftCont updateRightCont
-
-  leftEnv  = if leftEndSend /= receiver
-    then updateEnvWithSendProcWith fl receiver leftEndSend oldLeftEnv
-    else oldLeftEnv
-  rightEnv = if rightEndSend /= receiver
-    then updateEnvWithSendProcWith fr receiver rightEndSend oldRightEnv
-    else oldRightEnv
-
-  -- procs that do both branches
-  dupEnv = Map.intersectionWith (addBranch sender) leftEnv rightEnv
-  -- procs that do action in the left branch, not in the right branch
-  newLeftEnv =
-    Map.map (\x -> addBranch sender x (toAProc $ return $ Lit ()))
-      $ Map.difference leftEnv rightEnv
-  -- procs that do action in the right branch, not in the left branch
-  newRightEnv =
-    Map.map (\x -> addBranch sender (toAProc $ return $ Lit ()) x)
       $ Map.difference rightEnv leftEnv
 
   newEnv = Map.union dupEnv $ Map.union newLeftEnv newRightEnv

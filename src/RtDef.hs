@@ -39,6 +39,8 @@ data ProcRTF next where
     Rec' :: Integer -> next -> ProcRTF next
     Mu' :: Integer -> ProcRTF a
 
+    ForcedEval' :: (Serialise a) => Core a -> (Core a -> next) -> ProcRTF next
+
 instance Functor ProcRTF where
     fmap f (Send' r v n              ) = Send' r v $ f n
     fmap f (Recv' r cont             ) = Recv' r (f . cont)
@@ -52,6 +54,7 @@ instance Functor ProcRTF where
 
     fmap f (Rec' var n) = Rec' var (f n)
     fmap _ (Mu' var   ) = Mu' var
+    fmap f (ForcedEval' val cont) = ForcedEval' val (f . cont)
 
 -- type ProcRT a = Free ProcRTF (Core a)
 type ProcRT a = ProcRT' (Core a)
@@ -115,6 +118,9 @@ selectMulti' rs var cont1 cont2 = liftF $ SelectMult' rs var cont1 cont2 id
 
 branchCont' :: Serialise c => Nat -> ProcRT c -> ProcRT c -> ProcRT c
 branchCont' role left right = liftF $ BranchCont' role left right id
+
+forcedEval' :: Serialise a => Core a -> ProcRT a
+forcedEval' val = liftF $ ForcedEval' val id
 
 convert' :: ProcRT a -> STypeV ()
 convert' = convert 0

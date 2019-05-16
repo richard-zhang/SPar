@@ -256,6 +256,15 @@ traverseToCodeGen ps = mapM (uncurry $ helper) ps
         restOfInstrs <- helper_ stype next role cxt
         return restOfInstrs
     helper_ stype (Free (Mu' _)) role cxt = return $ Seq.singleton $ CRec role
+    helper_ stype (Free (ForcedEval' (val :: Core a) cont)) role cxt = do
+        varName <- freshVarName
+        let var = Var $ fromIntegral varName
+        let instrs = Seq.fromList
+                [ CDecla varName (singleType :: SingleType a)
+                , CAssgn varName $ Exp val singleType
+                ]
+        restOfInstrs <- helper_ stype (cont var) role cxt
+        return $ instrs Seq.>< restOfInstrs
 
     updateCxt rule a = a { ruleForPureCg = rule }
     updateIgnore = updateCxt RIgnore

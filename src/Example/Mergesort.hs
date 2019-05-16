@@ -14,32 +14,28 @@ import           ParPattern
 testArr = runPipe one val $ expr
 
 -- testArr1 = runPipe1 zero (arr func)
-testArr1 = runPipe1 zero expr3
+testArr1 = runPipe1 zero expr4
 
-expr1 = (
-    arr func
-    |||
-    arr func
-    )
+expr1 = (arr func ||| arr func)
 
-expr2 = arr func3 >>> 
-    (
-    (arr (func4 "gg") )
-    |||
-    (arr (func4 "hf") )
-    )
-    >>> arr func5
+expr2 = arr func3 >>> ((arr (func4 "gg")) ||| (arr (func4 "hf"))) >>> arr func5
 
-expr3 = arr split
-    >>> (   arr Inl
-    ||| (   (arr Fst >>> arr sort)
-        &&& (arr Snd >>> arr sort)
-        >>> arr Inr
-        )
-    ) >>> arr merge
+expr3 =
+    arr split
+        >>> (   arr Inl
+            ||| (   (arr Fst >>> arr sort)
+                &&& (arr Snd >>> arr sort)
+                >>> arr Inr
+                )
+            )
+        >>> arr merge
+
+expr4 =
+    (arr (func4 "hw") >>> arr (func4 "gg"))
+        *** (arr (func4 "hw2") >>> arr (func4 "gg2"))
 
 funcAny :: Core (a -> Int)
-funcAny =  Prim "any" undefined
+funcAny = Prim "any" undefined
 
 func = Prim "test" undefined :: Core (Int -> (Int, Int))
 func1 = Prim "test1" undefined :: Core ((Int, Int) -> (Int, Int))
