@@ -12,6 +12,9 @@ import           Data.Type.Natural
 import           Language.C
 import           System.Process
 import           System.Exit
+import           System.FilePath
+import           System.Directory
+import           Data.List.Split
 
 import           CodeGen.Data
 import           CodeGen.Monad
@@ -31,30 +34,85 @@ data CgRule where
     RIgnore :: CgRule -- ignore the result 
 
 codeGenDebug :: Bool -> [AProcessRT] -> IO ()
-codeGenDebug isDebug xs = codeGenHelper evalCodeGen xs isDebug
+codeGenDebug isDebug xs = codeGenHelper defaultHeaders evalCodeGen xs isDebug
 
 codeGenDebug1 :: Bool -> ([AProcessRT], EntryRole a b) -> IO ()
 codeGenDebug1 isDebug (xs, entry) =
-    codeGenHelper (evalCodeGen1 entry) xs isDebug
+    codeGenHelper defaultHeaders (evalCodeGen1 entry) xs isDebug
+
+codeGenBenchList
+    :: (Serialise a)
+    => [a]
+    -> ([AProcessRT], EntryRole [a] b)
+    -> FilePath
+    -> IO ()
+codeGenBenchList sourceData (xs, entry) dir =
+    createDirectoryIfMissing True dir >> writeSource >> writeHeader
+  where
+    mainAST                = benchMain sourceData
+    (sourceAST, headerAST) = evalCodeGen2 mainAST entry $ traverseToCodeGen xs
+
+    dataPath               = dir </> "data.h"
+    sourcePath             = dir </> "code.c"
+
+    writeSource =
+        writeFile sourcePath (headers ++ (show $ pretty sourceAST) ++ "\n")
+    writeHeader = writeFile dataPath dataHeader
+
+    headers     = concatMap
+        ((++ "\n") . ("#include" ++))
+        (defaultHeaders ++ fmap ((++ "\"") . ("\"" ++)) ["data.h", "../func.h"])
+
+    dataHeader = addIncludeGuard $ show $ pretty headerAST
+
+    addIncludeGuard x = "#ifndef DATA_H\n#define DATA_H\n" ++ x ++ "\n#endif\n"
 
 -- error "the list of processes are not dual"
 -- | checkDual xs = codeGen
 codeGenHelper
-    :: (CodeGen IO [(Nat, Seq Instr)] -> CTranslUnit)
+    :: [String]
+    -> (CodeGen IO [(Nat, Seq Instr)] -> CTranslUnit)
     -> [AProcessRT]
     -> Bool
     -> IO ()
-codeGenHelper eval xs isDebug
+codeGenHelper headers eval xs isDebug
     | True || isDual = codeGen
     | otherwise      = putStrLn "processes not dual" >> codeGen
   where
     isDual = checkDual $ fmap f xs
     f (AProcRT _ process, role) = (ignoreOutput process, role)
     codeGen = (if isDebug then makeTrue else return ())
-        >> writeFile "codegen/code.c" (headers ++ source ++ "\n")
-    source  = (show . pretty) $ eval $ traverseToCodeGen xs
-    headers = concatMap (\x -> "#include<" ++ x ++ ".h>\n")
-                        ["stdint", "stdio", "stdlib", "chan", "pthread"]
+        >> writeFile "codegen/code.c" (headerPretty ++ source ++ "\n")
+    source       = (show . pretty) $ eval $ traverseToCodeGen xs
+    headerPretty = concatMap ((++ "\n") . ("#include" ++)) headers
+
+defaultHeaders :: [String]
+defaultHeaders = fmap
+    (\x -> "<" ++ x ++ ".h>")
+    ["stdint", "stdio", "stdlib", "chan", "pthread", "sys/time", "sys/resource"]
+
+codeGenBuildRunBench
+    :: Serialise a
+    => [a]
+    -> ([AProcessRT], EntryRole [a] b)
+    -> FilePath
+    -> IO Double
+codeGenBuildRunBench sourceData xs path = do
+    codeGenBenchList sourceData xs path
+    (rc, _, _) <- readCreateProcessWithExitCode
+        (shell $ "make build SRC=" ++ path)
+        []
+    case rc of
+        ExitSuccess -> do
+            (rcC, output, _) <- readCreateProcessWithExitCode
+                (shell $ "make run SRC=" ++ path)
+                []
+            case rcC of
+                ExitSuccess -> return $ read $ helper output
+                _           -> error "runtime error"
+        _ -> error "build failed"
+    where
+        helper input = last $ init $ splitOn "\n" input
 
 codeGenBuildRun :: Serialise a => [ProcessRT a] -> IO Bool
 codeGenBuildRun = codeGenBuildRun' . fmap (\(x, y) -> (toAProc x, y))
@@ -94,7 +152,7 @@ traverseToCodeGen ps = mapM (uncurry $ helper) ps
     helper_ stype (Pure (expr :: Core a)) _ ExtraContext {..} = do
         updateDataStructCollect stype
         return $ case ruleForPureCg of
-            RReturn       -> Seq.singleton (CEnd (Exp expr stype))
+            RReturn       -> Seq.empty -- Seq.singleton (CEnd (Exp expr stype))
             RAssign varId -> Seq.singleton (CAssgn varId $ Exp expr stype)
             RIgnore       -> Seq.empty
     helper_ stype (Free (Send' receiver (expr :: Core a) next)) role cxt = do

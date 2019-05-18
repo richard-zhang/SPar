@@ -41,6 +41,15 @@ evalCodeGen1 entry ma = codeGenCombinedWithEntry instrs st entry
   where
     (instrs, st) = unsafePerformIO $ runStateT (runCodeGen ma) initCodeGenState
 
+evalCodeGen2
+    :: CExtDecl
+    -> EntryRole a b
+    -> CodeGen IO [(Nat, Seq Instr)]
+    -> (CTranslUnit, CTranslUnit)
+evalCodeGen2 main entry ma = codeGenCombinedWithEntry2 main instrs st entry
+  where
+    (instrs, st) = unsafePerformIO $ runStateT (runCodeGen ma) initCodeGenState
+
 codeGenCombinedWithEntry
     :: [(Nat, Seq Instr)] -> CodeGenState -> EntryRole a b -> CTranslUnit
 codeGenCombinedWithEntry instrs st entry@EntryRole {..} = CTranslUnit
@@ -60,6 +69,37 @@ codeGenCombinedWithEntry instrs st entry@EntryRole {..} = CTranslUnit
     sumTypeDecls =
         fmap (CDeclExt . dataStructDecl) $ Set.toList $ dataStructCollect st
     main = [CFDefExt $ emptyMain]
+    entryFuncDecl =
+        [CFDefExt $ entryFunc entry sendChanCid recvChanCid cid roles]
+    funcsRt     = fmap (CFDefExt . uncurry instrToFuncRt) instrs
+    funcsCaller = fmap (CFDefExt . pthreadFunc . fst) instrs
+    sendChanCid =
+        getCid ChanKey { chanCreator = entryRole, chanDestroyer = startRole }
+    recvChanCid =
+        getCid ChanKey { chanCreator = endRole, chanDestroyer = entryRole }
+    getCid key = fromMaybe
+        (error ("key not exists in chantable" ++ show key))
+        (Map.lookup key $ newChanTable st)
+
+codeGenCombinedWithEntry2
+    :: CExtDecl
+    -> [(Nat, Seq Instr)]
+    -> CodeGenState
+    -> EntryRole a b
+    -> (CTranslUnit, CTranslUnit)
+codeGenCombinedWithEntry2 main instrs st entry@EntryRole {..} =
+    (mainSource, dataHeader)
+  where
+    mainSource = CTranslUnit
+        (channelDecls ++ funcsRt ++ funcsCaller ++ entryFuncDecl ++ [main])
+        undefNode
+    dataHeader   = CTranslUnit (labelEnum : sumTypeDecls) undefNode
+
+    cid          = chanNext st
+    channelDecls = chanDecls cid
+    roles        = fmap fst instrs
+    sumTypeDecls =
+        fmap (CDeclExt . dataStructDecl) $ Set.toList $ dataStructCollect st
     entryFuncDecl =
         [CFDefExt $ entryFunc entry sendChanCid recvChanCid cid roles]
     funcsRt     = fmap (CFDefExt . uncurry instrToFuncRt) instrs
@@ -130,8 +170,8 @@ getFlagOrSetFlag key value = do
 getChannelAndUpdateChanTable2 :: Monad m => ChanKey -> Nat -> CodeGen m CID
 getChannelAndUpdateChanTable2 key _ = do
     codeGenState <- get
-    let chanTable    = newChanTable codeGenState
-    let result = Map.lookup key chanTable
+    let chanTable = newChanTable codeGenState
+    let result    = Map.lookup key chanTable
     case result of
         Just cid -> return cid
         Nothing  -> createAndAddChannel2 key
@@ -164,13 +204,12 @@ getChannel sender receiver = do
     let chanKey = ChanKey { chanCreator = sender, chanDestroyer = receiver }
     cid <- getChannelAndUpdateChanTable2 chanKey receiver
     return $ Channel cid singleType
-    
+
 
 getSendValueChanInstr
     :: Monad m => Exp a -> SingleType a -> Nat -> Nat -> CodeGen m Instr
 getSendValueChanInstr expr sType sender receiver = do
-    let chanKey =
-            ChanKey { chanCreator = sender, chanDestroyer = receiver }
+    let chanKey = ChanKey { chanCreator = sender, chanDestroyer = receiver }
     cid <- getChannelAndUpdateChanTable2 chanKey sender
     let chan = Channel cid sType
     return $ CSend chan expr

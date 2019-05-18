@@ -1,6 +1,6 @@
 CC := gcc
-CFLAGS := -I ./chan/build/include/chan -pedantic -std=c99 -Wall -Wextra -lpthread -L ./chan/build/lib/ -lchan
-SRC := codegen
+CFLAGS := -O2 -I ./chan/build/include/chan -pedantic -std=c99 -Wall -Wextra -lpthread -L ./chan/build/lib/ -lchan
+SRC ?= codegen
 FNAME := code
 DEP := chan/build/include/chan/*.h chan/build/lib/libchan.a
 

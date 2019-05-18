@@ -64,7 +64,7 @@ data Core (a :: *)
     Unit  :: Core ()
 
     Lit :: Value a => a -> Core a
-
+    
     -- use internally
     Var :: Integer -> Core a
     Val :: Value a => a -> Core a

@@ -14,7 +14,7 @@ import           ParPattern
 testArr = runPipe one val $ expr
 
 -- testArr1 = runPipe1 zero (arr func)
-testArr1 = runPipe1 zero expr4
+testArr1 = runPipe1 zero expr
 
 expr1 = (arr func ||| arr func)
 

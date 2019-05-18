@@ -4,6 +4,9 @@ module CodeGen.Utils where
 import           Language.C
 import           Data.String
 
+initListExprs :: [CExpr] -> CInit
+initListExprs input = CInitList (fmap (\x -> ([], CInitExpr x undefNode)) input) undefNode
+
 cVar :: String -> CExpr
 cVar str = CVar (internalIdent str) undefNode
 
@@ -24,6 +27,9 @@ intTy = CTypeSpec $ CIntType undefNode
 
 floatTy :: CDeclSpec
 floatTy = CTypeSpec $ CFloatType undefNode
+
+doubleTy :: CDeclSpec
+doubleTy = CTypeSpec $ CDoubleType undefNode
 
 voidTy :: CDeclSpec
 voidTy = CTypeSpec $ CVoidType undefNode
@@ -115,12 +121,12 @@ ptr :: CDeclr -> CDeclr
 ptr (CDeclr nm mods cstr attrs node) =
   CDeclr nm (CPtrDeclr [] undefNode : mods) cstr attrs node
 
-justPtr :: CDeclr
-justPtr = CDeclr Nothing [CPtrDeclr [] undefNode] Nothing [] undefNode
-
 arr :: CDeclr -> CDeclr
 arr (CDeclr nm mods cstr attrs node) =
   CDeclr nm (CArrDeclr [] (CNoArrSize False) undefNode : mods) cstr attrs node
+
+justPtr :: CDeclr
+justPtr = CDeclr Nothing [CPtrDeclr [] undefNode] Nothing [] undefNode
 
 fun :: [CDeclSpec] -> String -> [Maybe CExpr -> CDecl] -> CStat -> CFunDef
 fun specs name args body = annotatedFun specs name args [] body

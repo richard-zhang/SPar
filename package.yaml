@@ -1,10 +1,7 @@
 library:
   source-dirs: src
   ghc-options:
-  # - -j4 +RTS -A32m -RTS
-  # - -O2
   - -Wall
-  # -  -Wincomplete-patterns
 tests:
   spar-test:
     source-dirs: test
@@ -21,6 +18,10 @@ tests:
 copyright: Copyright (c) 2019 Shuhao Zhang
 maintainer: rzsh2003@gmail.com
 dependencies:
+- split ==0.2.3.3
+- directory
+- random
+- filepath
 - process >= 1.6 && < 1.7
 - base >= 4.9 && < 5
 - free >= 5.0 && < 5.1
