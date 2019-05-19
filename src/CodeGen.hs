@@ -91,7 +91,7 @@ codeGenHelper headers eval xs isDebug
 defaultHeaders :: [String]
 defaultHeaders = fmap
     (\x -> "<" ++ x ++ ".h>")
-    ["stdint", "stdio", "stdlib", "chan", "pthread", "sys/time", "sys/resource"]
+    ["stdint", "stdio", "stdlib", "chan", "pthread"]
 
 codeGenBuildRunBench
     :: Serialise a
