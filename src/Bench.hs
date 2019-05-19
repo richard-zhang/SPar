@@ -12,8 +12,8 @@ class Range a where
     rBound :: a
 
 instance Range Int where
-    lBound = - 2^12
-    rBound = 2^12
+    lBound = -2147483648
+    rBound = 2147483647
 
 randomlist :: (Range a, Random a) => Int -> StdGen -> [a]
 randomlist n = take n . unfoldr (Just . randomR (lBound, rBound))

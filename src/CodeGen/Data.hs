@@ -199,48 +199,54 @@ stypeToCExpr s@(ProductSingleType a b) v = defCompoundLit
   [ ([], initExp $ stypeToCExpr a (fst v))
   , ([], initExp $ stypeToCExpr b (snd v))
   ]
-stypeToCExpr s@(ListSingleType a) v = listExpr
- where
-  arrayInit = initListExprs (fmap (stypeToCExpr a) v)
-  tmp       = CDecl [CTypeSpec $ stypeToTypeSpec a]
-                    [(Just $ arr $ fromString "tmp", Just arrayInit, Nothing)]
-                    undefNode
-  rhs = defCompoundLit
-    (show s)
-    [([], initExp sizeExpr), ([], initExp $ fromString "tmp")]
-  tmp2     = decl (CTypeSpec $ idSpec $ show s) (fromString "tmp2") (Just rhs)
-  sizeExpr = (fromIntegral $ length v) :: CExpr
-  statements =
-    [ CBlockDecl tmp
-    , CBlockDecl tmp2
-    , CBlockStmt $ CExpr (Just $ cVar "tmp2") undefNode
-    ]
-  combStat = CCompound [] statements undefNode
-  listExpr = CStatExpr combStat undefNode
--- stypeToCExpr s@(ListSingleType a) v = defCompoundLit
---   (show s)
---   [([], initExp sizeExpr), ([], initExp listExpr)]
+-- stypeToCExpr s@(ListSingleType a) v = rhs
 --  where
---   sizeExpr   = (fromIntegral $ length v) :: CExpr
---   listExpr   = CStatExpr combStat undefNode
---   comb       = zip ([0 ..] :: [Int]) v
---   exprs      = fmap (\(x, y) -> (("tmp" !: x) <-- (stypeToCExpr a y))) comb
---   mallocExpr = castTo
---     ( malloc
---     $ ((fromIntegral $ length v) * (sizeOfDecl $ ty2Decl (stypeToTypeSpec a)))
---     )
---     (decl (CTypeSpec $ stypeToTypeSpec a) justPtr Nothing)
+--   sizeExpr = (fromIntegral $ length v) :: CExpr
+--   rhs      = defCompoundLit
+--     (show s)
+--     [([], initExp sizeExpr), ([], initExp $ fromString "tmp")]
+-- stypeToCExpr s@(ListSingleType a) v = listExpr
+--  where
+--   arrayInit = initListExprs (fmap (stypeToCExpr a) v)
+--   tmp       = CDecl [CTypeSpec $ stypeToTypeSpec a]
+--                     [(Just $ arr $ fromString "tmp", Just arrayInit, Nothing)]
+--                     undefNode
+--   rhs = defCompoundLit
+--     (show s)
+--     [([], initExp sizeExpr), ([], initExp $ fromString "tmp")]
+--   tmp2     = decl (CTypeSpec $ idSpec $ show s) (fromString "tmp2") (Just rhs)
+--   sizeExpr = (fromIntegral $ length v) :: CExpr
 --   statements =
---     CBlockDecl
---         (decl (CTypeSpec $ stypeToTypeSpec a)
---               (ptr $ fromString "tmp")
---               (Just mallocExpr)
---         )
---       : (  fmap CBlockStmt
---         $  fmap (\x -> CExpr (Just x) undefNode) exprs
---         ++ [CExpr (Just $ cVar "tmp") undefNode]
---         )
+--     [ CBlockDecl tmp
+--     , CBlockDecl tmp2
+--     , CBlockStmt $ CExpr (Just $ cVar "tmp2") undefNode
+--     ]
 --   combStat = CCompound [] statements undefNode
+--   listExpr = CStatExpr combStat undefNode
+stypeToCExpr s@(ListSingleType a) v = defCompoundLit
+  (show s)
+  [([], initExp sizeExpr), ([], initExp listExpr)]
+ where
+  sizeExpr   = (fromIntegral $ length v) :: CExpr
+  listExpr   = CStatExpr combStat undefNode
+  comb       = zip ([0 ..] :: [Int]) v
+  exprs      = fmap (\(x, y) -> (("tmp" !: x) <-- (stypeToCExpr a y))) comb
+  mallocExpr = castTo
+    ( malloc
+    $ ((fromIntegral $ length v) * (sizeOfDecl $ ty2Decl (stypeToTypeSpec a)))
+    )
+    (decl (CTypeSpec $ stypeToTypeSpec a) justPtr Nothing)
+  statements =
+    CBlockDecl
+        (decl (CTypeSpec $ stypeToTypeSpec a)
+              (ptr $ fromString "tmp")
+              (Just mallocExpr)
+        )
+      : (  fmap CBlockStmt
+        $  fmap (\x -> CExpr (Just x) undefNode) exprs
+        ++ [CExpr (Just $ cVar "tmp") undefNode]
+        )
+  combStat = CCompound [] statements undefNode
 
 stypeToTypeSpec :: SingleType a -> CTypeSpec
 stypeToTypeSpec stype = case stype of
@@ -339,11 +345,10 @@ benchMain (sourceData :: a) = CFDefExt
   $ fun [intTy] "main" [] (CCompound [] statements undefNode)
  where
   stype = singleType :: SingleType a
-  cexpr = stypeToCExpr stype sourceData
-  a     = decl (CTypeSpec $ stypeToTypeSpec stype) (fromString "a") (Just cexpr)
   start =
     decl doubleTy (fromString "start") (Just $ (fromString "get_time") # [])
   call = (fromString "proc0") # [(fromString "a")]
+  debugPrint = fromString "printList" # [call]
   end  = decl doubleTy (fromString "end") (Just $ (fromString "get_time") # [])
   printTime =
     (fromString "printf")
@@ -352,13 +357,28 @@ benchMain (sourceData :: a) = CFDefExt
         ]
   ret = creturn 0
   statements =
-    [ CBlockDecl a
-    , CBlockDecl start
-    , CBlockStmt $ CExpr (Just call) undefNode
-    , CBlockDecl end
-    , CBlockStmt $ CExpr (Just printTime) undefNode
-    , CBlockStmt ret
-    ]
+    sourceDataDeclStatements stype sourceData
+      ++ [ CBlockDecl start
+         , CBlockStmt $ CExpr (Just call) undefNode
+         , CBlockDecl end
+         , CBlockStmt $ CExpr (Just printTime) undefNode
+         , CBlockStmt ret
+         ]
+
+sourceDataDeclStatements :: SingleType a -> a -> [CBlockItem]
+sourceDataDeclStatements s@(ListSingleType a) v =
+  [CBlockDecl tmp, CBlockDecl varA]
+ where
+  arrayInit = initListExprs (fmap (stypeToCExpr a) v)
+  tmp       = CDecl [CTypeSpec $ stypeToTypeSpec a]
+                    [(Just $ arr $ fromString "tmp", Just arrayInit, Nothing)]
+                    undefNode
+  varA     = decl (CTypeSpec $ stypeToTypeSpec s) (fromString "a") (Just rhs)
+  sizeExpr = (fromIntegral $ length v) :: CExpr
+  rhs      = defCompoundLit
+    (show s)
+    [([], initExp sizeExpr), ([], initExp $ fromString "tmp")]
+sourceDataDeclStatements _ _ = undefined
 
 funcBodyHelper :: CID -> [Nat] -> [CBlockItem] -> [CBlockItem] -> [CBlockItem]
 funcBodyHelper cid roles middle end =
