@@ -52,16 +52,18 @@ codeGenBenchList sourceData (xs, entry) dir =
     mainAST                = benchMain sourceData
     (sourceAST, headerAST) = evalCodeGen2 mainAST entry $ traverseToCodeGen xs
 
-    dataPath               = dir </> "data.h"
+    -- dataPath               = removeLast </> "data.h"
     sourcePath             = dir </> "code.c"
+
+    -- removeLast = joinPath $ init $ splitPath dir
 
     writeSource =
         writeFile sourcePath (headers ++ (show $ pretty sourceAST) ++ "\n")
-    writeHeader = writeFile dataPath dataHeader
+    writeHeader = return () -- writeFile dataPath dataHeader
 
     headers     = concatMap
         ((++ "\n") . ("#include" ++))
-        (defaultHeaders ++ fmap ((++ "\"") . ("\"" ++)) ["data.h", "../func.h"])
+        (defaultHeaders ++ fmap ((++ "\"") . ("\"" ++)) ["../data.h", "../func.h"])
 
     dataHeader = addIncludeGuard $ show $ pretty headerAST
 

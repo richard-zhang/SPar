@@ -12,8 +12,8 @@ class Range a where
     rBound :: a
 
 instance Range Int where
-    lBound = 1
-    rBound = 100
+    lBound = - 2^12
+    rBound = 2^12
 
 randomlist :: (Range a, Random a) => Int -> StdGen -> [a]
 randomlist n = take n . unfoldr (Just . randomR (lBound, rBound))
@@ -25,8 +25,9 @@ benchmarkList
     :: (Serialise a, Random a, Range a)
     => FilePath
     -> Int
-    -> ArrowPipe [a] b
+    -> Int
+    -> (Int -> ArrowPipe [a] b)
     -> IO Double
-benchmarkList path size expr = codeGenBuildRunBench (getList 100 size)
-                                                    (runPipe1 zero expr)
-                                                    (path </> show size)
+benchmarkList path unroll size expr = codeGenBuildRunBench (getList 100 size)
+                                                    (runPipe1 zero (expr unroll))
+                                                    (path </> (show size ++ "_" ++ show unroll))
