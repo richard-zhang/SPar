@@ -144,7 +144,7 @@ writeBenchmarkCSV path sourceData = B.writeFile csvPath csvRaw
 
     csvRaw  = encodeByName csvTitle records
 
-    csvPath = path </> "raw.csv"
+    csvPath = path </> "bench.csv"
 
 newtype BenchData = BenchData (Int, Int, Double, Double)
 
