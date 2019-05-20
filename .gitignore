@@ -4,3 +4,4 @@ spar.cabal
 .idea/
 *.iml
 .vscode/
+.DS_Store

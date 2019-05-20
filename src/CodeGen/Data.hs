@@ -349,7 +349,7 @@ benchMain (sourceData :: a) = CFDefExt
     decl doubleTy (fromString "start") (Just $ (fromString "get_time") # [])
   call = (fromString "proc0") # [(fromString "a")]
   debugPrint = fromString "printList" # [call]
-  end  = decl doubleTy (fromString "end") (Just $ (fromString "get_time") # [])
+  end = decl doubleTy (fromString "end") (Just $ (fromString "get_time") # [])
   printTime =
     (fromString "printf")
       # [ CConst (CStrConst (CString "%lf\n" False) undefNode)

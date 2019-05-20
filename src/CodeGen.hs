@@ -40,13 +40,13 @@ codeGenDebug1 :: Bool -> ([AProcessRT], EntryRole a b) -> IO ()
 codeGenDebug1 isDebug (xs, entry) =
     codeGenHelper defaultHeaders (evalCodeGen1 entry) xs isDebug
 
-codeGenBenchList
+codeGenBench
     :: (Serialise a)
-    => [a]
-    -> ([AProcessRT], EntryRole [a] b)
+    => a
+    -> ([AProcessRT], EntryRole a b)
     -> FilePath
     -> IO ()
-codeGenBenchList sourceData (xs, entry) dir =
+codeGenBench sourceData (xs, entry) dir =
     createDirectoryIfMissing True dir >> writeSource >> writeHeader
   where
     mainAST                = benchMain sourceData
@@ -63,7 +63,9 @@ codeGenBenchList sourceData (xs, entry) dir =
 
     headers     = concatMap
         ((++ "\n") . ("#include" ++))
-        (defaultHeaders ++ fmap ((++ "\"") . ("\"" ++)) ["../data.h", "../func.h"])
+        (  defaultHeaders
+        ++ fmap ((++ "\"") . ("\"" ++)) ["../data.h", "../func.h"]
+        )
 
     dataHeader = addIncludeGuard $ show $ pretty headerAST
 
@@ -89,18 +91,17 @@ codeGenHelper headers eval xs isDebug
     headerPretty = concatMap ((++ "\n") . ("#include" ++)) headers
 
 defaultHeaders :: [String]
-defaultHeaders = fmap
-    (\x -> "<" ++ x ++ ".h>")
-    ["stdint", "stdio", "stdlib", "chan", "pthread"]
+defaultHeaders = fmap (\x -> "<" ++ x ++ ".h>")
+                      ["stdint", "stdio", "stdlib", "chan", "pthread"]
 
 codeGenBuildRunBench
     :: Serialise a
-    => [a]
-    -> ([AProcessRT], EntryRole [a] b)
+    => a
+    -> ([AProcessRT], EntryRole a b)
     -> FilePath
     -> IO Double
 codeGenBuildRunBench sourceData xs path = do
-    codeGenBenchList sourceData xs path
+    codeGenBench sourceData xs path
     (rc, _, _) <- readCreateProcessWithExitCode
         (shell $ "make build SRC=" ++ path)
         []
@@ -110,11 +111,13 @@ codeGenBuildRunBench sourceData xs path = do
                 (shell $ "make run SRC=" ++ path)
                 []
             case rcC of
-                ExitSuccess -> return $ read $ helper output
-                _           -> error "runtime error"
-        _ -> error "build failed"
-    where
-        helper input = last $ init $ splitOn "\n" input
+                ExitSuccess -> rmDir >> (return $ read $ helper output)
+                _           -> rmDir >> error "runtime error"
+        _ -> rmDir >> error "build failed"
+  where
+    helper input = last $ init $ splitOn "\n" input
+    rmDir = removeDirectoryRecursive path
+
 
 codeGenBuildRun :: Serialise a => [ProcessRT a] -> IO Bool
 codeGenBuildRun = codeGenBuildRun' . fmap (\(x, y) -> (toAProc x, y))

@@ -15,6 +15,7 @@
 :set -XConstraintKinds
 :set -XQuasiQuotes
 :set -XTypeApplications
+:set -XOverloadedStrings
 import Control.Monad.Free
 import Data.Singletons
 import Language.C.Pretty
