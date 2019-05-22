@@ -14,14 +14,8 @@ testArr = runPipe one val $ expr
 -- testArr1 = runPipe1 zero (arr func)
 testArr1 = runPipe1 zero expr
 
-func = Prim "test" undefined :: Core (Int -> (Int, Int))
-func1 = Prim "test1" undefined :: Core ((Int, Int) -> (Int, Int))
-func3 = Prim "test3" undefined :: Core (Int -> Either Int Int)
-func4 str = Prim str undefined :: Core (Int -> Int)
-func5 = Prim "test5" undefined :: Core (Int -> ())
-func6 = Prim "test6" undefined :: Core (a -> a)
+testMergeSort = runPipe1 zero (mergeSort 1)
 
--- expr = ((arr func) &&& (arr func)) >>> arr func1 >>> arr Fst >>> arr func
 expr = mergeSort 0
 val = Lit [1, 2, 4, 3, 2, 1, 10, 1000, 50, 6, 100, 4, 5, 100] :: Core [Int]
 

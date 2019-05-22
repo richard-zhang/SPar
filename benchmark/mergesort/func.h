@@ -1,15 +1,15 @@
 #ifndef FUNC_H
 #define FUNC_H
+#include<time.h>
+#include<sys/time.h>
+#include<sys/resource.h>
 #include "data.h"
 #define SORT_NAME int
 #define SORT_TYPE int
 #define SORT_CMP(x, y) ((x) - (y))
 #include "sort.h"
-#include<time.h>
-#include<sys/time.h>
-#include<sys/resource.h>
 
-double get_time()
+static inline double get_time()
 {
     struct timeval t;
     gettimeofday(&t, NULL);

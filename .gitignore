@@ -5,3 +5,5 @@ spar.cabal
 *.iml
 .vscode/
 .DS_Store
+*.o
+benchmark/*/code.*

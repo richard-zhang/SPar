@@ -112,8 +112,8 @@ codeGenBuildRunBench sourceData xs path = do
                 []
             case rcC of
                 ExitSuccess -> rmDir >> (return $ read $ helper output)
-                _           -> rmDir >> error "runtime error"
-        _ -> rmDir >> error "build failed"
+                _           -> error "runtime error"
+        _ -> error "build failed"
   where
     helper input = last $ init $ splitOn "\n" input
     rmDir = removeDirectoryRecursive path
