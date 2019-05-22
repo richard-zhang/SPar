@@ -8,7 +8,6 @@
 {-# LANGUAGE KindSignatures            #-}
 module Example.Mergesort where
 import           Lib
-import           ParPattern
 
 testMergeSort = runPipe1 zero (mergeSort 1)
   where

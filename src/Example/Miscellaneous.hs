@@ -8,7 +8,6 @@
 {-# LANGUAGE KindSignatures            #-}
 module Example.Miscellaneous where
 import Lib
-import           Pattern                       as X
 
 cgt0 = do
     send' one (Lit 10 :: Core Int)

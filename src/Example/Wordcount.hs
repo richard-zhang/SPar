@@ -1,7 +1,5 @@
 module Example.Wordcount where
-
 import           Lib
-import           ParPattern
 
 testWordCount = runPipe1 zero expr
   where

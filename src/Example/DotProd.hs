@@ -8,7 +8,6 @@
 {-# LANGUAGE KindSignatures            #-}
 module Example.DotProd where
 import           Lib
-import           ParPattern
 
 imult :: Core ((Int, Int) -> Int)
 imult = Prim "imult" (uncurry (*))

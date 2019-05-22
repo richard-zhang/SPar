@@ -61,6 +61,21 @@ divConq baseFunc alg coalg x =
         )
     >>> coalg
 
+divConquer
+  :: (Serialise a, Serialise b)
+  => ArrowPipe a b
+  -> ArrowPipe a (a, a)
+  -> ArrowPipe (b, b) b
+  -> Int
+  -> ArrowPipe a b
+divConquer baseFunc _split _merge 0 = baseFunc
+divConquer baseFunc split merge level =
+  split
+    >>> (   divConquer baseFunc split merge (level - 1)
+        *** divConquer baseFunc split merge (level - 1)
+        )
+    >>> merge
+
 arrowId :: Serialise a => ArrowPipe a a
 arrowId = arr Id
 
