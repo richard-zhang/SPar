@@ -145,13 +145,14 @@ convertToCExpr (Exp (expr :: Core a) stype) = case expr of
     (internalIdent "snd")
     False
     undefNode
+  (Id      :$ subExp) -> convertToCExpr (Exp subExp stype)
+  (Const a :$ _     ) -> convertToCExpr (Exp a stype)
+  ((Prim ident _) :$ subExp) ->
+    cVar ident # [convertToCExpr (Exp subExp singleType)]
   Pair l r -> productCExp (Exp l $ getLeftProdType stype)
                           (Exp r $ getRightProdType stype)
                           stype
-  ((Prim ident _) :$ subExp) ->
-    cVar ident # [convertToCExpr (Exp subExp singleType)]
-  (Id :$ subExp) -> convertToCExpr (Exp subExp stype)
-  _              -> undefined
+  _ -> undefined
 
 printDebug :: Exp a -> CExpr
 printDebug = debugPrint . samplingCExpr
@@ -357,7 +358,7 @@ benchMain (sourceData :: a) = CFDefExt
         ]
   ret = creturn 0
   statements =
-    sourceDataDeclStatements stype sourceData
+    sourceDataDeclStatements "tmp" "a" stype sourceData
       ++ [ CBlockDecl start
          , CBlockStmt $ CExpr (Just call) undefNode
          , CBlockDecl end
@@ -365,20 +366,34 @@ benchMain (sourceData :: a) = CFDefExt
          , CBlockStmt ret
          ]
 
-sourceDataDeclStatements :: SingleType a -> a -> [CBlockItem]
-sourceDataDeclStatements s@(ListSingleType a) v =
+sourceDataDeclStatements
+  :: String -> String -> SingleType a -> a -> [CBlockItem]
+sourceDataDeclStatements tmpName outputName s@(ListSingleType a) v =
   [CBlockDecl tmp, CBlockDecl varA]
  where
   arrayInit = initListExprs (fmap (stypeToCExpr a) v)
   tmp       = CDecl [CTypeSpec $ stypeToTypeSpec a]
-                    [(Just $ arr $ fromString "tmp", Just arrayInit, Nothing)]
+                    [(Just $ arr $ fromString tmpName, Just arrayInit, Nothing)]
                     undefNode
-  varA     = decl (CTypeSpec $ stypeToTypeSpec s) (fromString "a") (Just rhs)
+  varA =
+    decl (CTypeSpec $ stypeToTypeSpec s) (fromString outputName) (Just rhs)
   sizeExpr = (fromIntegral $ length v) :: CExpr
   rhs      = defCompoundLit
     (show s)
-    [([], initExp sizeExpr), ([], initExp $ fromString "tmp")]
-sourceDataDeclStatements _ _ = undefined
+    [([], initExp sizeExpr), ([], initExp $ fromString tmpName)]
+sourceDataDeclStatements _tmpName outputName s@(ProductSingleType a b) v =
+  left ++ right ++ [CBlockDecl varA]
+ where
+  varLeft  = "aLeft"
+  varRight = "aRight"
+  left     = sourceDataDeclStatements "tmpLeft" varLeft a (fst v)
+  right    = sourceDataDeclStatements "tmpRight" varRight b (snd v)
+  varA =
+    decl (CTypeSpec $ stypeToTypeSpec s) (fromString outputName) (Just rhs)
+  rhs = defCompoundLit
+    (show s)
+    [([], initExp $ fromString varLeft), ([], initExp $ fromString varRight)]
+sourceDataDeclStatements _ _ _ _ = undefined
 
 funcBodyHelper :: CID -> [Nat] -> [CBlockItem] -> [CBlockItem] -> [CBlockItem]
 funcBodyHelper cid roles middle end =

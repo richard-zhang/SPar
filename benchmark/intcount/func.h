@@ -47,7 +47,7 @@ static inline Sum_List_int_Prod_List_int_List_int split(List_int a) {
     size_t size = a.size;
     int *value = a.value;
     if (size <= 1) {
-        return (Sum_List_int_Prod_List_int_List_int) {LEFT, a};
+        return (Sum_List_int_Prod_List_int_List_int) {LEFT, .value.left = a};
     } else {
         size_t leftSize = size/2;
         size_t rightSize = size - leftSize;

@@ -7,3 +7,5 @@ spar.cabal
 .DS_Store
 *.o
 benchmark/*/code.*
+misc/
+codegen/

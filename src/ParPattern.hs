@@ -41,6 +41,26 @@ data Pipe a (b  :: Type) =
 
 type ArrowPipe a b = Nat -> Pipe a b
 
+-- hylomorphism
+divConq
+  :: (Serialise a, Serialise b, Serialise c)
+  => ArrowPipe a b
+  -> ArrowPipe a (Either c (a, a))
+  -> ArrowPipe (Either c (b, b)) b
+  -> Int
+  -> ArrowPipe a b
+divConq baseFunc _ _ 0 = baseFunc
+divConq baseFunc alg coalg x =
+  alg
+    >>> (   arr Inl
+        ||| (   (   (arr Fst >>> divConq baseFunc alg coalg (x - 1))
+                &&& (arr Snd >>> divConq baseFunc alg coalg (x - 1))
+                )
+            >>> arr Inr
+            )
+        )
+    >>> coalg
+
 arrowId :: Serialise a => ArrowPipe a a
 arrowId = arr Id
 
