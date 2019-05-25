@@ -1,35 +1,52 @@
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ScopedTypeVariables       #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Bench where
 import           System.Random
 import           Data.List
 import           Graphics.Rendering.Chart.Easy
 import           Graphics.Rendering.Chart.Backend.Diagrams
 import           System.FilePath
+import           System.Directory
 import qualified Data.Vector                   as Vec
 import qualified Statistics.Sample             as Stat
 import           Data.Csv                hiding ( (.=) )
 import qualified Data.Csv                      as Csv
                                                 ( (.=) )
 import qualified Data.ByteString.Lazy          as B
-import           Data.Map                       ( Map )
 import qualified Data.Map                      as Map
+import           Data.Type.Natural
+import           Data.List                      ( intercalate )
+import qualified Data.Store                    as Store
+                                         hiding ( size )
+import qualified Data.ByteString               as Bs
 
-
-import           Lib
-import           CodeGen
+import           CodeGen.Type
 import           ParPattern
+import           CodeGen
 
 class GenRange a where
     lBound :: a
     rBound :: a
 
-instance GenRange Int where
-    lBound = -2147483648
-    rBound = 2147483647
+class RandomGenData a where
+    genData :: Int -> Int -> IO a
 
-type Benchable a = (Serialise a, Random a, GenRange a)
+instance RandomGenData a => RandomGenData (a, a) where
+    genData x y = do
+        first  <- genData x y
+        second <- genData x y
+        return (first, second)
+
+instance (GenRange a, Random a) => RandomGenData [a] where
+    genData x y = randomList2 x (mkStdGen y)
+
+type Benchable a = (Serialise a, RandomGenData a)
+
+randomList2 :: (GenRange a, Random a) => Int -> StdGen -> IO [a]
+randomList2 n _ =
+    newStdGen >>= return . take n . unfoldr (Just . randomR (lBound, rBound))
 
 randomlist :: (GenRange a, Random a) => Int -> StdGen -> [a]
 randomlist n = take n . unfoldr (Just . randomR (lBound, rBound))
@@ -37,51 +54,75 @@ randomlist n = take n . unfoldr (Just . randomR (lBound, rBound))
 getList :: (GenRange a, Random a) => Int -> Int -> [a]
 getList seed size = randomlist (2 ^ size) (mkStdGen seed)
 
-benchmarkList
-    :: Benchable a
-    => FilePath
-    -> Int
-    -> Int
-    -> Int
-    -> (Int -> ArrowPipe [a] b)
-    -> IO Double
-benchmarkList path seed unroll size expr = codeGenBuildRunBench
-    (getList seed size)
-    (runPipe1 zero (expr unroll))
-    (path </> (show size ++ "_" ++ show unroll))
-
-benchmarkSeeds
-    :: Benchable a
-    => FilePath
-    -> [Int]
-    -> Int
-    -> Int
-    -> (Int -> ArrowPipe [a] b)
-    -> IO (Double, Double)
-benchmarkSeeds path seeds unroll size expr =
-    toBenchData <$> mapM (\x -> benchmarkList path x unroll size expr) seeds
-
-benchmarkUnRolls
-    :: Benchable a
-    => FilePath
-    -> [Int]
-    -> [Int]
-    -> Int
-    -> (Int -> ArrowPipe [a] b)
-    -> IO [(Int, (Double, Double))]
-benchmarkUnRolls path seeds unrolls size expr = fmap (zip unrolls)
-    $ mapM (\x -> benchmarkSeeds path seeds x size expr) unrolls
-
 benchmarkStart
     :: Benchable a
     => FilePath
     -> [Int]
     -> [Int]
     -> [Int]
-    -> (Int -> ArrowPipe [a] b)
+    -> (Int -> ArrowPipe a b)
     -> IO [(Int, [(Int, (Double, Double))])]
 benchmarkStart path seeds unrolls sizes expr = fmap (zip sizes)
-    $ mapM (\x -> benchmarkUnRolls path seeds unrolls x expr) sizes
+    $ mapM benchmarkUnRolls sizes
+  where
+    benchmarkUnRolls size =
+        fmap (zip unrolls) $ mapM (benchmarkSeeds size) unrolls
+    benchmarkSeeds size unroll =
+        toBenchData <$> mapM (benchmarkList size unroll) seeds
+    benchmarkList size unroll seed = do
+        x <- genData (2 ^ size) seed
+        codeGenBuildRunBench
+            x
+            (runPipe1 zero (expr unroll))
+            (path </> (intercalate "_" [show size, show unroll, show seed]))
+
+benchmarkCompile
+    :: Benchable a
+    => FilePath
+    -> [Int]
+    -> [Int]
+    -> [Int]
+    -> (Int -> ArrowPipe a b)
+    -> IO ()
+benchmarkCompile path seeds unrolls sizes expr = mapM_ benchmarkUnRolls sizes
+  where
+    benchmarkUnRolls size = mapM_ (benchmarkSeeds size) unrolls
+    benchmarkSeeds size unroll = mapM_ (benchmarkList size unroll) seeds
+    benchmarkList size unroll seed = do
+        x <- genData (2 ^ size) seed
+        codeGenBenchCompile
+            x
+            (runPipe1 zero (expr unroll))
+            (path </> (intercalate "_" [show size, show unroll, show seed]))
+
+benchmarkRun :: FilePath -> Int -> [Int] -> [Int] -> [Int] -> IO ()
+benchmarkRun path time seeds unrolls sizes =
+    rawData >>= (Bs.writeFile (path </> rawDataName) . Store.encode)
+  where
+    rawData = fmap (zip sizes) $ mapM benchmarkUnRolls sizes
+    benchmarkUnRolls size =
+        fmap (zip unrolls) $ mapM (benchmarkSeeds size) unrolls
+    benchmarkSeeds size unroll =
+        toBenchData <$> (concat <$> mapM (benchmarkList size unroll) seeds)
+    benchmarkList size unroll seed = mapM
+        (const $ codeGenBenchRun
+            (path </> (intercalate "_" [show size, show unroll, show seed]))
+        )
+        [1 .. time]
+
+rawDataName :: String
+rawDataName = "rawData"
+
+benchmarkCollectData :: FilePath -> IO ()
+benchmarkCollectData path = do
+    rawDataRead <- Bs.readFile (path </> rawDataName)
+    let rawData = case Store.decode rawDataRead of
+            Left  x -> error $ show x
+            Right y -> y
+    removeFile (path </> rawDataName)
+    writeBenchmarkCSV path rawData
+    writeBenchmarkPlot path rawData
+    writeBenchmarkSpeedUpPlot path rawData
 
 benchmarking
     :: Benchable a
@@ -89,12 +130,12 @@ benchmarking
     -> [Int]
     -> [Int]
     -> [Int]
-    -> (Int -> ArrowPipe [a] b)
+    -> (Int -> ArrowPipe a b)
     -> IO ()
 benchmarking path seeds unrolls sizes expr = do
-    rawData <- benchmarkStart path seeds unrolls sizes expr
-    writeBenchmarkCSV path rawData
-    writeBenchmarkPlot path rawData
+    benchmarkCompile path seeds unrolls sizes expr
+    benchmarkRun path 1 seeds unrolls sizes
+    benchmarkCollectData path
 
 mean :: [Double] -> Double
 mean = (Stat.mean . Vec.fromList)
@@ -111,11 +152,33 @@ writeBenchmarkPlot path sourceData = toFile def imagePath $ do
     (plotLines . toPlottableData) sourceData
     where imagePath = path </> "bench.svg"
 
+-- the first int is size
+writeBenchmarkSpeedUpPlot
+    :: FilePath -> [(Int, [(Int, (Double, Double))])] -> IO ()
+writeBenchmarkSpeedUpPlot path sourceData = toFile def imagePath $ do
+    layout_title .= "Speedup"
+    (plotLines . toPlottableData . toSpeedUpData) sourceData
+    where imagePath = path </> "benchSpeedup.svg"
+
+-- the first int is k
 plotLines :: [(Int, [(Int, Double)])] -> EC (Layout Int Double) ()
 plotLines = mapM_ (uncurry plotLine)
   where
     plotLine :: Int -> [(Int, Double)] -> EC (Layout Int Double) ()
-    plotLine title xs = plot (line (show title) [xs])
+    plotLine title xs = plot (line ("k" ++ show title) [xs])
+
+toSpeedUpData
+    :: [(Int, [(Int, (Double, Double))])] -> [(Int, [(Int, (Double, Double))])]
+toSpeedUpData = fmap (\(x, y) -> (x, helper helper2 y))
+  where
+    helper2
+        :: (Int, (Double, Double))
+        -> (Int, (Double, Double))
+        -> (Int, (Double, Double))
+    helper2 (size, parTime) (_, serTime) =
+        (size, (fst serTime / fst parTime, snd parTime))
+
+    helper f xs = fmap (\x -> f x (head xs)) (tail xs)
 
 toPlottableData
     :: [(Int, [(Int, (Double, Double))])] -> [(Int, [(Int, Double)])]

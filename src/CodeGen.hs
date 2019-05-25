@@ -40,13 +40,13 @@ codeGenDebug1 :: Bool -> ([AProcessRT], EntryRole a b) -> IO ()
 codeGenDebug1 isDebug (xs, entry) =
     codeGenHelper defaultHeaders (evalCodeGen1 entry) xs isDebug
 
-codeGenBench
+codeGenBenchCompile
     :: (Serialise a)
     => a
     -> ([AProcessRT], EntryRole a b)
     -> FilePath
     -> IO ()
-codeGenBench sourceData (xs, entry) dir =
+codeGenBenchCompile sourceData (xs, entry) dir =
     createDirectoryIfMissing True dir >> writeSource >> writeHeader
   where
     mainAST                = benchMain sourceData
@@ -101,10 +101,14 @@ codeGenBuildRunBench
     -> FilePath
     -> IO Double
 codeGenBuildRunBench sourceData xs path = do
-    codeGenBench sourceData xs path
+    codeGenBenchCompile sourceData xs path
+    codeGenBenchRun path
+
+codeGenBenchRun :: FilePath -> IO Double
+codeGenBenchRun path = do
     (rc, _, _) <- readCreateProcessWithExitCode
-        (shell $ "make build SRC=" ++ path)
-        []
+            (shell $ "make build SRC=" ++ path)
+            []
     case rc of
         ExitSuccess -> do
             (rcC, output, _) <- readCreateProcessWithExitCode
@@ -114,9 +118,9 @@ codeGenBuildRunBench sourceData xs path = do
                 ExitSuccess -> rmDir >> (return $ read $ helper output)
                 _           -> error "runtime error"
         _ -> error "build failed"
-  where
-    helper input = last $ init $ splitOn "\n" input
-    rmDir = removeDirectoryRecursive path
+      where
+        helper input = last $ init $ splitOn "\n" input
+        rmDir = removeDirectoryRecursive path
 
 
 codeGenBuildRun :: Serialise a => [ProcessRT a] -> IO Bool

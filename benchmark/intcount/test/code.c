@@ -741,7 +741,7 @@ int main()
     int tmp[] = { 1, 2, 1, 2, 1, 2, 1, 2, 1, 1, 1, 1, 1, 1, 1, 5, 5, 5, 6, 6, 6, 6, 8, 9, 9, 9 };
     List_int a = (List_int) {26, tmp};
     double start = get_time();
-    printListProdIntInt(proc0(a));
+    proc0(a);
     double end = get_time();
     printf("%lf\n", end - start);
     return 0;

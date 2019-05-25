@@ -18,6 +18,7 @@ tests:
 copyright: Copyright (c) 2019 Shuhao Zhang
 maintainer: rzsh2003@gmail.com
 dependencies:
+- store >= 0.5 && < 0.6
 - bytestring
 - time
 - cassava >= 0.5 && < 0.6

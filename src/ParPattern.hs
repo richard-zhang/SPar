@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE ExplicitForAll            #-}
 {-# LANGUAGE GADTs                     #-}
@@ -40,6 +41,18 @@ data Pipe a (b  :: Type) =
     }
 
 type ArrowPipe a b = Nat -> Pipe a b
+
+
+type family Vec (n :: Nat) (a :: Type) where
+   Vec 'Z a = ()
+   Vec ('S n) a = (a, Vec n a)
+   
+pmap :: (Serialise a, Serialise b)
+     => ArrowPipe a b
+     -> ArrowPipe a (a, (a, a))
+     -> ArrowPipe (b, (b, b)) b 
+     -> ArrowPipe a b
+pmap f s c = s >>> (f *** (f *** f)) >>> c
 
 -- hylomorphism
 divConq
