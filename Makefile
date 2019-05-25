@@ -27,4 +27,9 @@ sr:
 cr: clean run 
 	@echo "Hello, World in the end"
 
-.PHONY: build clean run cr sr chan
+cleanB:
+	rm -rf benchmark/dotprod/*_*_*
+	rm -rf benchmark/intcount/*_*_*
+	rm -rf benchmark/mergesort/*_*_*
+
+.PHONY: build clean run cr sr chan cleanB

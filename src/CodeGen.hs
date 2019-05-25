@@ -115,7 +115,7 @@ codeGenBenchRun path = do
                 (shell $ "make run SRC=" ++ path)
                 []
             case rcC of
-                ExitSuccess -> rmDir >> (return $ read $ helper output)
+                ExitSuccess -> (return $ read $ helper output)
                 _           -> error "runtime error"
         _ -> error "build failed"
       where

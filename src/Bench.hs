@@ -11,9 +11,7 @@ import           System.FilePath
 import           System.Directory
 import qualified Data.Vector                   as Vec
 import qualified Statistics.Sample             as Stat
-import           Data.Csv                hiding ( (.=) )
 import qualified Data.Csv                      as Csv
-                                                ( (.=) )
 import qualified Data.ByteString.Lazy          as B
 import qualified Data.Map                      as Map
 import           Data.Type.Natural
@@ -21,6 +19,8 @@ import           Data.List                      ( intercalate )
 import qualified Data.Store                    as Store
                                          hiding ( size )
 import qualified Data.ByteString               as Bs
+import           Options.Applicative
+import           Data.Semigroup                 ( (<>) )
 
 import           CodeGen.Type
 import           ParPattern
@@ -205,19 +205,42 @@ writeBenchmarkCSV path sourceData = B.writeFile csvPath csvRaw
         (\(unroll, (meanVal, stdVal)) -> BenchData (x, unroll, meanVal, stdVal))
         xs
 
-    csvRaw  = encodeByName csvTitle records
+    csvRaw  = Csv.encodeByName csvTitle records
 
     csvPath = path </> "bench.csv"
 
 newtype BenchData = BenchData (Int, Int, Double, Double)
 
-instance ToNamedRecord BenchData where
-    toNamedRecord (BenchData (size, unroll, meanVal, stdVal)) = namedRecord
+instance Csv.ToNamedRecord BenchData where
+    toNamedRecord (BenchData (size, unroll, meanVal, stdVal)) = Csv.namedRecord
         [ "size" Csv..= size
         , "unroll" Csv..= unroll
         , "mean" Csv..= meanVal
         , "std" Csv..= stdVal
         ]
 
-csvTitle :: Vec.Vector Name
+csvTitle :: Vec.Vector Csv.Name
 csvTitle = Vec.fromList ["size", "unroll", "mean", "std"]
+
+runParser :: Parser (Bool, Bool)
+runParser =
+    (,)
+        <$> switch (long "collect" <> short 'c' <> help "whether to collect")
+        <*> switch (long "run" <> short 'r' <> help "whether to run or codegen")
+
+
+benchmarkEntry
+    :: Benchable a
+    => FilePath
+    -> Int
+    -> [Int]
+    -> [Int]
+    -> [Int]
+    -> (Int -> ArrowPipe a b)
+    -> IO ()
+benchmarkEntry path time seeds unrolls sizes expr = execParser opts >>= \x ->
+    case x of
+        (True , _    ) -> benchmarkCollectData path
+        (False, True ) -> benchmarkRun path time seeds unrolls sizes
+        (False, False) -> benchmarkCompile path seeds unrolls sizes expr
+    where opts = info (runParser <**> helper) mempty
