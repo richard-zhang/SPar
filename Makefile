@@ -3,6 +3,7 @@ CFLAGS := -O2 -I ./chan/build/include/chan -pedantic -std=c99 -Wall -Wextra -lpt
 SRC ?= codegen
 FNAME := code
 DEP := chan/build/include/chan/*.h chan/build/lib/libchan.a
+BNAME ?= intcount
 
 $(DEP):
 	cd chan/ && $(MAKE) build
@@ -32,4 +33,11 @@ cleanB:
 	rm -rf benchmark/intcount/*_*_*
 	rm -rf benchmark/mergesort/*_*_*
 
-.PHONY: build clean run cr sr chan cleanB
+bench:
+	stack exec runghc -- benchmark/$(BNAME)/main.hs
+	stack exec runghc -- benchmark/$(BNAME)/main.hs -r
+	stack exec runghc -- benchmark/$(BANME)/main.hs -c
+	rm -rf benchmark/$(BNAME)/*_*_*
+
+
+.PHONY: build clean run cr sr chan cleanB bench
