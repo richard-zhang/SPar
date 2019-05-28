@@ -13,6 +13,8 @@ testMergeSort = runPipe1 zero (mergeSort 1)
   where
     val = Lit [1, 2, 4, 3, 2, 1, 10, 1000, 50, 6, 100, 4, 5, 100] :: Core [Int]
 
+expr = mergeSort 2
+
 split :: Core ([Int] -> (Either (Either () Int) ([Int], [Int])))
 split = Prim "split" undefined
 

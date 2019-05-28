@@ -41,13 +41,12 @@ codeGenDebug1 isDebug (xs, entry) =
     codeGenHelper defaultHeaders (evalCodeGen1 entry) xs isDebug
 
 codeGenBenchCompile
-    :: (Serialise a)
-    => a
-    -> ([AProcessRT], EntryRole a b)
-    -> FilePath
-    -> IO ()
+    :: (Serialise a) => a -> ([AProcessRT], EntryRole a b) -> FilePath -> IO ()
 codeGenBenchCompile sourceData (xs, entry) dir =
-    createDirectoryIfMissing True dir >> writeSource >> writeHeader
+    createDirectoryIfMissing True dir
+        >> writeSource
+        >> writeHeader
+        >> codeGenBenchBuildFile dir
   where
     mainAST                = benchMain sourceData
     (sourceAST, headerAST) = evalCodeGen2 mainAST entry $ traverseToCodeGen xs
@@ -104,24 +103,44 @@ codeGenBuildRunBench sourceData xs path = do
     codeGenBenchCompile sourceData xs path
     codeGenBenchRun path
 
+codeGenBenchBuildFile :: FilePath -> IO ()
+codeGenBenchBuildFile path = do
+    (rc, _, _) <- readCreateProcessWithExitCode
+        (shell $ "make build SRC=" ++ path)
+        []
+    case rc of
+        ExitSuccess -> return ()
+        _           -> error "build failed"
+
+-- codeGenBenchRun :: FilePath -> IO Double
+-- codeGenBenchRun path = do
+--     (rc, _, _) <- readCreateProcessWithExitCode
+--             (shell $ "make build SRC=" ++ path)
+--             []
+--     case rc of
+--         ExitSuccess -> do
+--             (rcC, output, _) <- readCreateProcessWithExitCode
+--                 (shell $ "make run SRC=" ++ path)
+--                 []
+--             case rcC of
+--                 ExitSuccess -> (return $ read $ helper output)
+--                 _           -> error "runtime error"
+--         _ -> error "build failed"
+--       where
+--         helper input = last $ init $ splitOn "\n" input
+--         rmDir = removeDirectoryRecursive path
+
 codeGenBenchRun :: FilePath -> IO Double
 codeGenBenchRun path = do
-    (rc, _, _) <- readCreateProcessWithExitCode
-            (shell $ "make build SRC=" ++ path)
-            []
-    case rc of
-        ExitSuccess -> do
-            (rcC, output, _) <- readCreateProcessWithExitCode
-                (shell $ "make run SRC=" ++ path)
-                []
-            case rcC of
-                ExitSuccess -> (return $ read $ helper output)
-                _           -> error "runtime error"
-        _ -> error "build failed"
-      where
-        helper input = last $ init $ splitOn "\n" input
-        rmDir = removeDirectoryRecursive path
-
+    (rcC, output, _) <- readCreateProcessWithExitCode
+        (shell $ "make run SRC=" ++ path)
+        []
+    case rcC of
+        ExitSuccess -> (return $ read $ helper output)
+        _           -> error "runtime error"
+  where
+    helper input = last $ init $ splitOn "\n" input
+    rmDir = removeDirectoryRecursive path
 
 codeGenBuildRun :: Serialise a => [ProcessRT a] -> IO Bool
 codeGenBuildRun = codeGenBuildRun' . fmap (\(x, y) -> (toAProc x, y))

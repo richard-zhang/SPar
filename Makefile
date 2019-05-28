@@ -15,7 +15,7 @@ $(SRC)/$(FNAME).c:
 build: $(SRC)/$(FNAME).c $(DEP)
 	$(CC) $(SRC)/$(FNAME).c $(CFLAGS) -o $(SRC)/$(FNAME).o
 
-run: build
+run: $(SRC)/$(FNAME).o
 	./$(SRC)/$(FNAME).o
 
 clean:
@@ -35,9 +35,9 @@ cleanB:
 
 bench:
 	stack exec runghc -- benchmark/$(BNAME)/main.hs
-	stack exec runghc -- benchmark/$(BNAME)/main.hs -r
-	stack exec runghc -- benchmark/$(BANME)/main.hs -c
-	rm -rf benchmark/$(BNAME)/*_*_*
+	# stack exec runghc -- benchmark/$(BNAME)/main.hs -r
+	# stack exec runghc -- benchmark/$(BANME)/main.hs -c
+	# rm -rf benchmark/$(BNAME)/*_*_*
 
 
 .PHONY: build clean run cr sr chan cleanB bench

@@ -46,13 +46,19 @@ type ArrowPipe a b = Nat -> Pipe a b
 type family Vec (n :: Nat) (a :: Type) where
    Vec 'Z a = ()
    Vec ('S n) a = (a, Vec n a)
-   
-pmap :: (Serialise a, Serialise b)
-     => ArrowPipe a b
-     -> ArrowPipe a (a, (a, (a, a)))
-     -> ArrowPipe (b, (b, (b, b))) b 
-     -> ArrowPipe a b
+
+pmap
+  :: (Serialise a, Serialise b)
+  => ArrowPipe a b
+  -> ArrowPipe a (a, (a, (a, a)))
+  -> ArrowPipe (b, (b, (b, b))) b
+  -> ArrowPipe a b
 pmap f s c = s >>> (f *** (f *** (f *** f))) >>> c
+
+preduce :: (Serialise a) => ArrowPipe (a, a) a -> ArrowPipe (a, (a, (a, a))) a
+preduce r = helper >>> (r *** r) >>> r
+ where
+  helper = (arr Id *** arr Fst) &&& (arr Snd >>> arr Snd)
 
 -- hylomorphism
 divConq

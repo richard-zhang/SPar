@@ -25,6 +25,9 @@ import           Data.Semigroup                 ( (<>) )
 import           CodeGen.Type
 import           ParPattern
 import           CodeGen
+import           Example.Mergesort
+import           Example.DotProd
+import           Example.Wordcount
 
 class GenRange a where
     lBound :: a
@@ -244,3 +247,28 @@ benchmarkEntry path time seeds unrolls sizes expr = execParser opts >>= \x ->
         (False, True ) -> benchmarkRun path time seeds unrolls sizes
         (False, False) -> benchmarkCompile path seeds unrolls sizes expr
     where opts = info (runParser <**> helper) mempty
+
+instance GenRange Int where
+    lBound = minBound
+    rBound = maxBound
+
+benchmarkNewEntry :: 
+    FilePath 
+    -> Int
+    -> [Int]
+    -> [Int]
+    -> [Int]
+    -> IO ()
+benchmarkNewEntry mainPath time seeds unrolls sizes = execParser opts >>= \x ->
+    case x of
+        (True , _    ) -> mapM_ (\path -> benchmarkCollectData (mainPath </> path)) names
+        (False, True ) -> mapM_ (\path -> benchmarkRun (mainPath </> path) time seeds unrolls sizes) names
+        (False, False) -> mapM_ (\name -> myHelper name (mainPath </> name)) names
+    where 
+        names = ["intcount", "mergesort", "dotprod"]
+        opts = info (runParser <**> helper) mempty
+
+        myHelper "intcount" path = benchmarkCompile path seeds unrolls sizes wordCount
+        myHelper "mergesort" path = benchmarkCompile path seeds unrolls sizes mergeSort
+        myHelper "dotprod" path = benchmarkCompile path seeds unrolls sizes dotProd
+        myHelper _ _ = error "benchmark example not implemented"
