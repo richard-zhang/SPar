@@ -2,6 +2,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE RecordWildCards #-}
 module Bench where
 import           System.Random
 import           Data.List
@@ -113,8 +114,33 @@ benchmarkRun path time seeds unrolls sizes =
         )
         [1 .. time]
 
+benchmarkRun2 :: FilePath -> Int -> [Int] -> [Int] -> [Int] -> IO ()
+benchmarkRun2 path time seeds unrolls sizes =
+    (toRawData <$> rawData)
+        >>= (B.writeFile (path </> rawDataName2) . Csv.encode)
+  where
+    toRawData xs =
+        [ RawData size' 0 unroll' (fst val)
+        | (size'  , rest) <- xs
+        , (unroll', val ) <- rest
+        ]
+
+    rawData = fmap (zip sizes) $ mapM benchmarkUnRolls sizes
+    benchmarkUnRolls size =
+        fmap (zip unrolls) $ mapM (benchmarkSeeds size) unrolls
+    benchmarkSeeds size unroll =
+        toBenchData <$> (concat <$> mapM (benchmarkList size unroll) seeds)
+    benchmarkList size unroll seed = mapM
+        (const $ codeGenBenchRun
+            (path </> (intercalate "_" [show size, show unroll, show seed]))
+        )
+        [1 .. time]
+
 rawDataName :: String
 rawDataName = "rawData"
+
+rawDataName2 :: String
+rawDataName2 = "rawData.csv"
 
 benchmarkCollectData :: FilePath -> IO ()
 benchmarkCollectData path = do
@@ -124,6 +150,14 @@ benchmarkCollectData path = do
             Right y -> y
     removeFile (path </> rawDataName)
     writeBenchmarkCSV path rawData
+    writeBenchmarkPlot path rawData
+    writeBenchmarkSpeedUpPlot path rawData
+
+benchmarkCollectData2 :: FilePath -> IO ()
+benchmarkCollectData2 path = do
+    rawData <- rawDataDecode path
+    -- removeFile (path </> rawDataName2)
+    -- writeBenchmarkCSV path rawData
     writeBenchmarkPlot path rawData
     writeBenchmarkSpeedUpPlot path rawData
 
@@ -222,6 +256,53 @@ instance Csv.ToNamedRecord BenchData where
         , "std" Csv..= stdVal
         ]
 
+data RawData = RawData { size :: Int, seed :: Int, unroll :: Int, time :: Double }
+
+instance Csv.FromRecord RawData where
+    parseRecord v =
+        RawData <$> v Csv..! 0 <*> v Csv..! 1 <*> v Csv..! 2 <*> v Csv..! 3
+
+instance Csv.ToRecord RawData where
+    toRecord RawData {..} = Csv.record
+        [ Csv.toField size
+        , Csv.toField seed
+        , Csv.toField unroll
+        , Csv.toField time
+        ]
+
+rawDataDecode :: FilePath -> IO [(Int, [(Int, (Double, Double))])]
+rawDataDecode path = do
+    rawData <- B.readFile filePath
+    let decoder =
+            (Csv.decode Csv.NoHeader rawData) :: Either
+                    String
+                    (Vec.Vector RawData)
+    return $ rawDatadecode' decoder
+  where
+    filePath = path </> rawDataName2
+    rawDatadecode'
+        :: Either String (Vec.Vector RawData)
+        -> [(Int, [(Int, (Double, Double))])]
+    rawDatadecode' x = case x of
+        Left  msg        -> error $ "failed " ++ msg
+        Right sourceData -> (toList . toMap'' . toMap' . toMap) sourceData
+
+    toMap = Vec.foldl
+        (\map record ->
+            Map.insertWith (++) (size record, unroll record) [time record] map
+        )
+        Map.empty
+
+    toMap'' = Map.foldrWithKey
+        (\(mySize, myUnroll) val acc ->
+            Map.insertWith (Map.union) mySize (Map.singleton myUnroll val) acc
+        )
+        Map.empty
+
+    toMap' = Map.map toBenchData
+
+    toList = (Map.toList . Map.map Map.toList)
+
 csvTitle :: Vec.Vector Csv.Name
 csvTitle = Vec.fromList ["size", "unroll", "mean", "std"]
 
@@ -230,7 +311,6 @@ runParser =
     (,)
         <$> switch (long "collect" <> short 'c' <> help "whether to collect")
         <*> switch (long "run" <> short 'r' <> help "whether to run or codegen")
-
 
 benchmarkEntry
     :: Benchable a
@@ -243,8 +323,8 @@ benchmarkEntry
     -> IO ()
 benchmarkEntry path time seeds unrolls sizes expr = execParser opts >>= \x ->
     case x of
-        (True , _    ) -> benchmarkCollectData path
-        (False, True ) -> benchmarkRun path time seeds unrolls sizes
+        (True , _    ) -> benchmarkCollectData2 path
+        (False, True ) -> benchmarkRun2 path time seeds unrolls sizes
         (False, False) -> benchmarkCompile path seeds unrolls sizes expr
     where opts = info (runParser <**> helper) mempty
 
@@ -252,23 +332,23 @@ instance GenRange Int where
     lBound = minBound
     rBound = maxBound
 
-benchmarkNewEntry :: 
-    FilePath 
-    -> Int
-    -> [Int]
-    -> [Int]
-    -> [Int]
-    -> IO ()
-benchmarkNewEntry mainPath time seeds unrolls sizes = execParser opts >>= \x ->
-    case x of
-        (True , _    ) -> mapM_ (\path -> benchmarkCollectData (mainPath </> path)) names
-        (False, True ) -> mapM_ (\path -> benchmarkRun (mainPath </> path) time seeds unrolls sizes) names
-        (False, False) -> mapM_ (\name -> myHelper name (mainPath </> name)) names
-    where 
-        names = ["intcount", "mergesort", "dotprod"]
-        opts = info (runParser <**> helper) mempty
+benchmarkNewEntry :: FilePath -> Int -> [Int] -> [Int] -> [Int] -> IO ()
+benchmarkNewEntry mainPath time seeds unrolls sizes =
+    execParser opts >>= \x -> case x of
+        (True, _) ->
+            mapM_ (\path -> benchmarkCollectData (mainPath </> path)) names
+        (False, True) -> mapM_
+            (\path -> benchmarkRun (mainPath </> path) time seeds unrolls sizes)
+            names
+        (False, False) ->
+            mapM_ (\name -> myHelper name (mainPath </> name)) names
+  where
+    names = ["intcount", "mergesort", "dotprod"]
+    opts  = info (runParser <**> helper) mempty
 
-        myHelper "intcount" path = benchmarkCompile path seeds unrolls sizes wordCount
-        myHelper "mergesort" path = benchmarkCompile path seeds unrolls sizes mergeSort
-        myHelper "dotprod" path = benchmarkCompile path seeds unrolls sizes dotProd
-        myHelper _ _ = error "benchmark example not implemented"
+    myHelper "intcount" path =
+        benchmarkCompile path seeds unrolls sizes wordCount
+    myHelper "mergesort" path =
+        benchmarkCompile path seeds unrolls sizes mergeSort
+    myHelper "dotprod" path = benchmarkCompile path seeds unrolls sizes dotProd
+    myHelper _         _    = error "benchmark example not implemented"

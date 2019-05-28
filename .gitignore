@@ -9,3 +9,6 @@ spar.cabal
 benchmark/*/code.*
 misc/
 codegen/
+benchmark/*/*_*_*/
+benchmark/*/raw*
+dest/

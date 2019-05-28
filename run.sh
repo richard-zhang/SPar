@@ -1,8 +1,8 @@
 #!/bin/sh
 
 SRC=benchmark/$1
-DATA=benchmark/$1/rawData.csv
 K=$2
+DATA=benchmark/$1/rawData_${K}.csv
 
 echo "size,seed,k,time" > $DATA
 # rsync -R $SRC/*_${K}_*/code.o dest 
