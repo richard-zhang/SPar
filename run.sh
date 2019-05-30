@@ -11,9 +11,11 @@ echo "size,seed,k,time" > $DATA
 for x in $SRC/*_${K}_*/code.o
 do
     # size=$(echo $x | grep -o -P "[0-9]+" | head -1)
-    size=$(echo $x | perl -nle'print $& while m{[0-9]+}g' | head -1)
+    size=$(echo $x | perl -nle'print $& while m{[0-9]+}g' | tail -3 | head -1)
     # seed=$(echo $x | grep -o -P "(\d+)(?!.*\d)")
-    seed=$(echo $x | perl -nle'print $& while m{(\d+)(?!.*\d)}g')
+    # seed=$(echo $x | perl -nle'print $& while m{(\d+)(?!.*\d)}g')
+    seed=$(echo $x | perl -nle'print $& while m{[0-9]+}g' | tail -1)
+    echo $size $seed
     time=$(./$x)
     echo $size,$seed,$K,$time >> $DATA
 done
