@@ -16,6 +16,8 @@ import           Data.Type.Natural              ( Nat )
 import           Language.C
 import           Data.IORef
 import           System.IO.Unsafe
+import           Type.Reflection
+import Unsafe.Coerce
 
 import           CodeGen.Type
 import           CodeGen.Utils
@@ -366,18 +368,23 @@ benchMain (sourceData :: a) = CFDefExt
          , CBlockStmt ret
          ]
 
+-- stypeToTypeRep :: SingleType a -> TypeRep a
+-- stypeToTypeRep 
+
 sourceDataDeclStatements
   :: String -> String -> SingleType a -> a -> [CBlockItem]
-sourceDataDeclStatements tmpName outputName s@(ListSingleType a) v =
-  [CBlockDecl tmp, CBlockDecl varA]
+sourceDataDeclStatements tmpName outputName s@(ListSingleType a@(NumSingleType (IntegralNumType _))) v
+  = 
+    [CBlockDecl tmp, CBlockDecl varA]
  where
-  arrayInit = CInitExpr (cVar "randomList" # [cInt $ fromIntegral $ length v]) undefNode-- initListExprs (fmap (stypeToCExpr a) v)
+  size :: Int    = unsafeCoerce $ head v
+  arrayInit = CInitExpr (cVar "randomList" # [sizeExpr]) undefNode-- initListExprs (fmap (stypeToCExpr a) v)
   tmp       = CDecl [CTypeSpec $ stypeToTypeSpec a]
                     [(Just $ ptr $ fromString tmpName, Just arrayInit, Nothing)]
                     undefNode
   varA =
     decl (CTypeSpec $ stypeToTypeSpec s) (fromString outputName) (Just rhs)
-  sizeExpr = (fromIntegral $ length v) :: CExpr
+  sizeExpr = (fromIntegral size) :: CExpr
   rhs      = defCompoundLit
     (show s)
     [([], initExp sizeExpr), ([], initExp $ fromString tmpName)]

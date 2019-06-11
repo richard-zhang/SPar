@@ -43,8 +43,8 @@ instance RandomGenData a => RandomGenData (a, a) where
         second <- genData x y
         return (first, second)
 
-instance (GenRange a, Random a) => RandomGenData [a] where
-    genData x y = randomList2 x (mkStdGen y)
+instance RandomGenData [Int] where
+    genData x _y = return [x]
 
 type Benchable a = (Serialise a, RandomGenData a)
 
