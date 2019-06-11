@@ -5,6 +5,7 @@
 #include<sys/resource.h>
 #include<stdio.h>
 #include<stdlib.h>
+#include<limits.h>
 #include "data.h"
 #include "hashmap.h"
 struct entry {
@@ -15,6 +16,15 @@ DEFINE_HASHMAP(intHashMap, struct entry)
 #define ENTRY_CMP(left, right) left->hash == right->hash ? 0 : 1
 #define ENTRY_HASH(entry) entry->hash
 DECLARE_HASHMAP(intHashMap, ENTRY_CMP, ENTRY_HASH, free, realloc)
+
+static inline int* randomList(size_t a) {
+    srand((unsigned int)time(NULL));
+    int * tmp = (int *) malloc(sizeof(int) * a);
+    for (size_t i = 0; i < a; i++) {
+        tmp[i] = rand() + rand(); //min + rand() / (RAND_MAX / (max - min + 1) + 1);
+    }
+    return tmp;
+}
 
 static inline double get_time()
 {

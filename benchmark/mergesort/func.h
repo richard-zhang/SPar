@@ -3,6 +3,9 @@
 #include<time.h>
 #include<sys/time.h>
 #include<sys/resource.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <limits.h>
 #include "data.h"
 #define SORT_NAME int
 #define SORT_TYPE int
@@ -14,6 +17,15 @@ static inline double get_time()
     struct timeval t;
     gettimeofday(&t, NULL);
     return t.tv_sec + t.tv_usec*1e-6;
+}
+
+static inline int* randomList(size_t a) {
+    srand((unsigned int)time(NULL));
+    int * tmp = (int *) malloc(sizeof(int) * a);
+    for (size_t i = 0; i < a; i++) {
+        tmp[i] = rand() + rand();
+    }
+    return tmp;
 }
 
 static inline void quicksort(int *A, int len) {

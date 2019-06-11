@@ -371,9 +371,9 @@ sourceDataDeclStatements
 sourceDataDeclStatements tmpName outputName s@(ListSingleType a) v =
   [CBlockDecl tmp, CBlockDecl varA]
  where
-  arrayInit = initListExprs (fmap (stypeToCExpr a) v)
+  arrayInit = CInitExpr (cVar "randomList" # [cInt $ fromIntegral $ length v]) undefNode-- initListExprs (fmap (stypeToCExpr a) v)
   tmp       = CDecl [CTypeSpec $ stypeToTypeSpec a]
-                    [(Just $ arr $ fromString tmpName, Just arrayInit, Nothing)]
+                    [(Just $ ptr $ fromString tmpName, Just arrayInit, Nothing)]
                     undefNode
   varA =
     decl (CTypeSpec $ stypeToTypeSpec s) (fromString outputName) (Just rhs)
