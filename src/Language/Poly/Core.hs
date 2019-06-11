@@ -70,7 +70,7 @@ data Core (a :: *)
     Val :: Value a => a -> Core a
 
     -- Apply
-    (:$) :: (Serialise a) => Core (a -> b) -> Core a -> Core b
+    (:$) :: (Serialise a, Serialise b) => Core (a -> b) -> Core a -> Core b
     -- (:$) :: a :-> b -> Core a -> Core b
 
     Prim  :: String -- XXX: name of the "primitive function"
@@ -239,7 +239,6 @@ instance Category CC (:->) where
   f . g = Fun (f `Comp` g)
 
 instance Arrow CC (:->) where
-  arr s f = Fun $ Prim s f
   -- fst = Fun Fst
   -- snd = Fun Snd
   (***) f g = Fun $ Split (f . fst) (g . snd)
@@ -262,29 +261,29 @@ instance ArrowVector CC Vec (:->) where
 instance ArrowApply CC (:->) where
   app = Fun Ap
 
-instance Pretty (a :-> b) where
-  pretty (Fun f) = pretty f
+-- instance Pretty (a :-> b) where
+--   pretty (Fun f) = pretty f
 
-instance Pretty (Core a) where
-  pretty Unit = [ppr| "()" |]
-  pretty (Val x) = [ppr| show x |]
-  pretty (Lit x) = [ppr| show x |]
-  pretty (Var x) = [ppr| "variable" + "(" + show x + ")"|]
-  pretty (Prim s _) = [ppr| s |]
-  pretty Ap = [ppr| "ap" |]
-  pretty (Curry f) =  [ppr| "curry" + "(" > f > ")" |]
-  pretty (Const v) = [ppr| "const" + "(" > v > ")" |]
-  pretty Id =  [ppr| "id" |]
-  pretty (Comp f g) = [ppr| f + "." + g |]
-  pretty Fst = [ppr| "fst" |]
-  pretty Snd = [ppr| "snd" |]
-  pretty (Split f g) = [ppr| f + "&&&" + g |]
-  pretty Inl = [ppr| "inl" |]
-  pretty Inr = [ppr| "inr" |]
-  pretty (Case f g) = [ppr| f + "|||" + g |]
-  pretty (Vect _) = [ppr| "vec (<functions>)" |]
-  pretty (Get i) = [ppr| "proj " > show i  |]
-  pretty (Fmap p f) = [ppr| p + "(" > f > ")" |]
-  pretty In = [ppr| "roll" |]
-  pretty Out = [ppr| "unroll" |]
-  pretty (Rec p f g) = [ppr| "rec" + p + "(" > f > ")" + "(" > g > ")" |]
+-- instance Pretty (Core a) where
+--   pretty Unit = [ppr| "()" |]
+--   pretty (Val x) = [ppr| show x |]
+--   pretty (Lit x) = [ppr| show x |]
+--   pretty (Var x) = [ppr| "variable" + "(" + show x + ")"|]
+--   pretty (Prim s _) = [ppr| s |]
+--   pretty Ap = [ppr| "ap" |]
+--   pretty (Curry f) =  [ppr| "curry" + "(" > f > ")" |]
+--   pretty (Const v) = [ppr| "const" + "(" > v > ")" |]
+--   pretty Id =  [ppr| "id" |]
+--   pretty (Comp f g) = [ppr| f + "." + g |]
+--   pretty Fst = [ppr| "fst" |]
+--   pretty Snd = [ppr| "snd" |]
+--   pretty (Split f g) = [ppr| f + "&&&" + g |]
+--   pretty Inl = [ppr| "inl" |]
+--   pretty Inr = [ppr| "inr" |]
+--   pretty (Case f g) = [ppr| f + "|||" + g |]
+--   pretty (Vect _) = [ppr| "vec (<functions>)" |]
+--   pretty (Get i) = [ppr| "proj " > show i  |]
+--   pretty (Fmap p f) = [ppr| p + "(" > f > ")" |]
+--   pretty In = [ppr| "roll" |]
+--   pretty Out = [ppr| "unroll" |]
+--   pretty (Rec p f g) = [ppr| "rec" + p + "(" > f > ")" + "(" > g > ")" |]

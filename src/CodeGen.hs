@@ -171,19 +171,21 @@ traverseToCodeGen ps = mapM (uncurry $ helper) ps
 
     -- TODO very inefficient way to update data struct collects update on every send, select and pure
     helper_
-        :: MonadIO m
+        :: (MonadIO m, Serialise a)
         => SingleType a
         -> ProcRT a
         -> Nat
         -> ExtraContext
         -> CodeGen m (Seq Instr)
     helper_ stype (Pure (expr :: Core a)) _ ExtraContext {..} = do
+        updateDataStructCollectFromCore expr
         updateDataStructCollect stype
         return $ case ruleForPureCg of
             RReturn       -> Seq.empty -- Seq.singleton (CEnd (Exp expr stype))
             RAssign varId -> Seq.singleton (CAssgn varId $ Exp expr stype)
             RIgnore       -> Seq.empty
     helper_ stype (Free (Send' receiver (expr :: Core a) next)) role cxt = do
+        updateDataStructCollectFromCore expr
         updateDataStructCollect (singleType :: SingleType a)
         chan         <- getChannel role receiver
         (varId, var) <- getNewVar
@@ -241,6 +243,7 @@ traverseToCodeGen ps = mapM (uncurry $ helper) ps
             return (instrs Seq.>< restOfInstrs)
     helper_ stype (Free (Select' receiver (expr :: Core (Either a b)) left right next)) role cxt
         = do
+            updateDataStructCollectFromCore expr
             updateDataStructCollect (singleType :: SingleType (Either a b))
             chan                        <- getChannel role receiver
             (varEitherName  , _       ) <- getNewVar
@@ -273,6 +276,7 @@ traverseToCodeGen ps = mapM (uncurry $ helper) ps
             b
         -> ProcRT c) next)) role cxt
         = do
+            updateDataStructCollectFromCore expr
             updateDataStructCollect (singleType :: SingleType (Either a b))
             (varEitherName  , _         ) <- getNewVar
             (varLabelName   , varLabel  ) <- getNewVar

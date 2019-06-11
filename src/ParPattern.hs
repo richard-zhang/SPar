@@ -233,10 +233,10 @@ compose first@Pipe{} second@Pipe{}
   eitherProcOrFunc = case sendProc of
     Just proc ->
       Left
-        $ let newProc = proc `bind4` (cont second)
+        $ let newProc = proc `bind4Force` (cont second)
           in  maybe newProc (newProc `bind`) $ Map.lookup sender $ env second
     Nothing -> if startNat first == endNat first
-      then Right $ (cont first) `bind3` (cont second)
+      then Right $ (cont first) `bind3Force` (cont second)
       else error "sender process in the first pipe not found"
 
   helper (Left proc) = Pipe { start = start first
@@ -543,10 +543,24 @@ bind3 (AProcRTFunc ty func) (AProcRTFunc ty2 (func2 :: Core c -> ProcRT b)) =
     Nothing    -> error "Two AProcRTFunc are not compatible"
   where rep = typeRep :: TypeRep c
 
+bind3Force :: AProcRTFunc a -> AProcRTFunc b -> AProcRTFunc a
+bind3Force (AProcRTFunc ty func) (AProcRTFunc ty2 (func2 :: Core c -> ProcRT b)) =
+  case ty `eqTypeRep` rep of
+    Just HRefl -> AProcRTFunc ty2 (func >=> forcedEval' >=> func2)
+    Nothing    -> error "Two AProcRTFunc are not compatible"
+  where rep = typeRep :: TypeRep c
+
 bind4 :: AProcRT -> AProcRTFunc a -> AProcRT
 bind4 (AProcRT ty proc) (AProcRTFunc ty2 (func :: Core c -> ProcRT b)) =
   case ty `eqTypeRep` rep of
     Just HRefl -> AProcRT ty2 (proc >>= func)
+    Nothing    -> error "AProcRT and AProcRTFunc are not compatible"
+  where rep = typeRep :: TypeRep c
+
+bind4Force :: AProcRT -> AProcRTFunc a -> AProcRT
+bind4Force (AProcRT ty proc) (AProcRTFunc ty2 (func :: Core c -> ProcRT b)) =
+  case ty `eqTypeRep` rep of
+    Just HRefl -> AProcRT ty2 (proc >>= forcedEval' >>= func)
     Nothing    -> error "AProcRT and AProcRTFunc are not compatible"
   where rep = typeRep :: TypeRep c
 

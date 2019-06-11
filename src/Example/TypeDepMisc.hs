@@ -43,6 +43,10 @@ test3 = select [snat|2|]
                (\_ -> recv [snat|2|])
                (\_ -> send [snat|2|] (Lit 30 :: Core Int))
 
+example1 = do
+    x :: Core Int <- recv [snat|0|]
+    send [snat|1|] x
+
 p0 = Process [snat|0|] test
 p1 = Process [snat|1|] test1
 p2 = Process [snat|2|] test2
@@ -60,8 +64,8 @@ cgTest1 = do
 pcg0 = Process [snat|0|] cgTest0
 pcg1 = Process [snat|1|] cgTest1
 
-hello :: DualityCons xs => PList xs -> String
-hello _ = "f"
+hello :: DualityCons xs => PList xs -> Int
+hello _ = 1
 
-gk :: String
+gk :: Int
 gk = hello ps

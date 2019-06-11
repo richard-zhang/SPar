@@ -329,8 +329,8 @@ benchmarkEntry path time seeds unrolls sizes expr = execParser opts >>= \x ->
     where opts = info (runParser <**> helper) mempty
 
 instance GenRange Int where
-    lBound = minBound
-    rBound = maxBound
+    lBound = -2^10
+    rBound = 2^10
 
 benchmarkNewEntry :: FilePath -> Int -> [Int] -> [Int] -> [Int] -> IO ()
 benchmarkNewEntry mainPath time seeds unrolls sizes =

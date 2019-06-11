@@ -176,6 +176,13 @@ getChannelAndUpdateChanTable2 key _ = do
         Just cid -> return cid
         Nothing  -> createAndAddChannel2 key
 
+updateDataStructCollectFromCore
+    :: (Serialise a, Monad m) => Core a -> CodeGen m ()
+updateDataStructCollectFromCore ((_func :: Core (a -> b)) :$ v) =
+    updateDataStructCollect (singleType :: SingleType a)
+        >> updateDataStructCollectFromCore v
+updateDataStructCollectFromCore _ = return ()
+
 updateDataStructCollect :: Monad m => SingleType a -> CodeGen m ()
 updateDataStructCollect stype = case stype of
     (SumSingleType a b) ->
