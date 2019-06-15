@@ -17,7 +17,7 @@ import           Language.C
 import           Data.IORef
 import           System.IO.Unsafe
 import           Type.Reflection
-import Unsafe.Coerce
+import           Unsafe.Coerce
 
 import           CodeGen.Type
 import           CodeGen.Utils

@@ -37,7 +37,7 @@ bench:
 	stack exec runghc -- benchmark/$(BNAME)/main.hs
 	stack exec runghc -- benchmark/$(BNAME)/main.hs -r
 	stack exec runghc -- benchmark/$(BNAME)/main.hs -c
-	# rm -rf benchmark/$(BNAME)/*_*_*
+	rm -rf benchmark/$(BNAME)/*_*_*
 runall:
 	stack exec -- spar-exe
 	stack exec -- spar-exe -r

@@ -7,21 +7,22 @@
 #include<stdlib.h>
 #include<limits.h>
 #include "data.h"
-#include "hashmap.h"
-struct entry {
-    int hash;
-    int counter;
-};
-DEFINE_HASHMAP(intHashMap, struct entry)
-#define ENTRY_CMP(left, right) left->hash == right->hash ? 0 : 1
-#define ENTRY_HASH(entry) entry->hash
-DECLARE_HASHMAP(intHashMap, ENTRY_CMP, ENTRY_HASH, free, realloc)
+// #include "hashmap.h"
+#define MYSIZE 50
+// struct entry {
+//     int hash;
+//     int counter;
+// };
+// DEFINE_HASHMAP(intHashMap, struct entry)
+// #define ENTRY_CMP(left, right) left->hash == right->hash ? 0 : 1
+// #define ENTRY_HASH(entry) entry->hash
+// DECLARE_HASHMAP(intHashMap, ENTRY_CMP, ENTRY_HASH, free, realloc)
 
 static inline int* randomList(size_t a) {
     srand((unsigned int)time(NULL));
     int * tmp = (int *) malloc(sizeof(int) * a);
     for (size_t i = 0; i < a; i++) {
-        tmp[i] = rand() + rand(); //min + rand() / (RAND_MAX / (max - min + 1) + 1);
+        tmp[i] = rand() % MYSIZE; //min + rand() / (RAND_MAX / (max - min + 1) + 1);
     }
     return tmp;
 }
@@ -33,25 +34,35 @@ static inline double get_time()
     return t.tv_sec + t.tv_usec*1e-6;
 }
 static inline List_Prod_int_int count(List_int a) {
-    intHashMap map;
-    intHashMapNew(&map);
-    struct entry entryRead, *entryFound;
-    for (size_t i = 0; i < a.size; i++) {
-        entryRead = (struct entry) {a.value[i], 0};
-        entryFound = &entryRead;
-        intHashMapPut(&map, &entryFound, HMDR_FIND);
-        ++entryFound->counter;
+    int map[50];
+    memset(map, 0, sizeof(int) * MYSIZE);
+    for(size_t i = 0; i < a.size; i++) {
+        map[a.value[i]] += 1;
     }
-    size_t mapSize = map.size;
-    Prod_int_int *ret = (Prod_int_int *) malloc(sizeof(Prod_int_int) * mapSize);
-    size_t i = 0;
-    HASHMAP_FOR_EACH(intHashMap, entryFound, map) {
-        ret[i] = (Prod_int_int) { entryFound->hash, entryFound->counter}; 
-        i++;
-    } HASHMAP_FOR_EACH_END;
-    intHashMapDestroy(&map);
-    // free(a.value);
-    return (List_Prod_int_int) {mapSize, ret};
+    Prod_int_int *ret = (Prod_int_int *) malloc(sizeof(Prod_int_int) * MYSIZE);
+    for(size_t i = 0; i < MYSIZE; i++) {
+        ret[i] = (Prod_int_int) {i, map[i]};
+    }
+    return (List_Prod_int_int) {MYSIZE, ret};
+    // intHashMap map;
+    // intHashMapNew(&map);
+    // struct entry entryRead, *entryFound;
+    // for (size_t i = 0; i < a.size; i++) {
+    //     entryRead = (struct entry) {a.value[i], 0};
+    //     entryFound = &entryRead;
+    //     intHashMapPut(&map, &entryFound, HMDR_FIND);
+    //     ++entryFound->counter;
+    // }
+    // size_t mapSize = map.size;
+    // Prod_int_int *ret = (Prod_int_int *) malloc(sizeof(Prod_int_int) * mapSize);
+    // size_t i = 0;
+    // HASHMAP_FOR_EACH(intHashMap, entryFound, map) {
+    //     ret[i] = (Prod_int_int) { entryFound->hash, entryFound->counter}; 
+    //     i++;
+    // } HASHMAP_FOR_EACH_END;
+    // intHashMapDestroy(&map);
+    // // free(a.value);
+    // return (List_Prod_int_int) {mapSize, ret};
 } 
 static inline Sum_List_int_Prod_List_int_List_int split(List_int a) {
     size_t size = a.size;
@@ -68,32 +79,40 @@ static inline Sum_List_int_Prod_List_int_List_int split(List_int a) {
     }
 }
 static inline List_Prod_int_int myunion(Prod_List_Prod_int_int_List_Prod_int_int a) {
-    intHashMap map;
-    intHashMapNew(&map);
-    struct entry entryRead, *entryFound;
-    for(size_t i = 0; i < a.fst.size; i++) {
-        entryRead =  (struct entry) {a.fst.value[i].fst, 0};
-        entryFound = &entryRead;
-        intHashMapPut(&map, &entryFound, HMDR_FIND);
-        entryFound->counter += a.fst.value[i].snd;
+
+    Prod_int_int *ret = (Prod_int_int *) malloc(sizeof(Prod_int_int) * MYSIZE);
+    for(size_t i = 0; i < MYSIZE; i++) {
+        ret[i] = (Prod_int_int) {i, a.fst.value[i].snd + a.snd.value[i].snd};
     }
-    for(size_t  i = 0; i < a.snd.size; i++) {
-        entryRead =  (struct entry) {a.snd.value[i].fst, 0};
-        entryFound = &entryRead;
-        intHashMapPut(&map, &entryFound, HMDR_FIND);
-        entryFound->counter += a.snd.value[i].snd;
-    }
-    size_t mapSize = map.size;
-    Prod_int_int *ret = (Prod_int_int *) malloc(sizeof(Prod_int_int) * mapSize);
-    size_t i = 0;
-    HASHMAP_FOR_EACH(intHashMap, entryFound, map) {
-        ret[i] = (Prod_int_int) { entryFound->hash, entryFound->counter}; 
-        i++;
-    } HASHMAP_FOR_EACH_END;
-    intHashMapDestroy(&map);
     free(a.fst.value);
     free(a.snd.value);
-    return (List_Prod_int_int) {mapSize, ret};
+    return (List_Prod_int_int) {MYSIZE, ret};
+    // intHashMap map;
+    // intHashMapNew(&map);
+    // struct entry entryRead, *entryFound;
+    // for(size_t i = 0; i < a.fst.size; i++) {
+    //     entryRead =  (struct entry) {a.fst.value[i].fst, 0};
+    //     entryFound = &entryRead;
+    //     intHashMapPut(&map, &entryFound, HMDR_FIND);
+    //     entryFound->counter += a.fst.value[i].snd;
+    // }
+    // for(size_t  i = 0; i < a.snd.size; i++) {
+    //     entryRead =  (struct entry) {a.snd.value[i].fst, 0};
+    //     entryFound = &entryRead;
+    //     intHashMapPut(&map, &entryFound, HMDR_FIND);
+    //     entryFound->counter += a.snd.value[i].snd;
+    // }
+    // size_t mapSize = map.size;
+    // Prod_int_int *ret = (Prod_int_int *) malloc(sizeof(Prod_int_int) * mapSize);
+    // size_t i = 0;
+    // HASHMAP_FOR_EACH(intHashMap, entryFound, map) {
+    //     ret[i] = (Prod_int_int) { entryFound->hash, entryFound->counter}; 
+    //     i++;
+    // } HASHMAP_FOR_EACH_END;
+    // intHashMapDestroy(&map);
+    // free(a.fst.value);
+    // free(a.snd.value);
+    // return (List_Prod_int_int) {mapSize, ret};
 }
 void printListProdIntInt(List_Prod_int_int a) {
     size_t size = a.size;
