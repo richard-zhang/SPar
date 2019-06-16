@@ -29,28 +29,38 @@ data STypeF a next where
     R :: Nat -> a -> next -> STypeF a next
     B :: Nat -> SType a c -> SType a c -> next -> STypeF a next
     Se :: Nat -> SType a c -> SType a c -> next -> STypeF a next
+    -- Br :: [Nat] -> SType a c -> SType a c -> next -> STypeF a next
+    Br :: [Nat] -> SType a c -> SType a c -> next -> STypeF a next
 
 instance Functor (STypeF a) where
     fmap f (S r a n)    = S r a (f n)
     fmap f (R r a n)    = R r a (f n)
     fmap f (B r a b n)  = B r a b (f n)
     fmap f (Se r a b n) = B r a b (f n)
+    -- fmap f (Br rs a b n) = Br rs a b (f n)
+    fmap f (Br rs a b n) = Br rs a b (f n)
 
 instance Eq a => Eq1 (STypeF a) where
-    liftEq eq (S r v n) (S r' v' n')        = r == r' && v == v' && eq n n'
-    liftEq eq (R r v n) (R r' v' n')        = r == r' && v == v' && eq n n'
-    liftEq eq (S _ _ _) (R _ _ _)        = error "send recv doesn't match"
-    liftEq eq (R _ _ _) (S _ _ _)        = error "recv send doesn't match"
-    -- TODO potential issue => don't care the result type of SType since it's not part of the protocols
-    liftEq eq (B r a b n) (B r' a' b' n')   = r == r' && liftEq (\_ _ -> True) a a' && eq n n'
-    liftEq eq (Se r a b n) (Se r' a' b' n') = r == r' && liftEq (\_ _ -> True) a a' && eq n n'
+    -- liftEq eq (S r v n) (S r' v' n')        = r == r' && v == v' && eq n n'
+    -- liftEq eq (R r v n) (R r' v' n')        = r == r' && v == v' && eq n n'
+    -- liftEq eq (S _ _ _) (R _ _ _)        = error "send recv doesn't match"
+    -- liftEq eq (R _ _ _) (S _ _ _)        = error "recv send doesn't match"
+    -- -- TODO potential issue => don't care the result type of SType since it's not part of the protocols
+    -- liftEq eq (B r a b n) (B r' a' b' n')   = r == r' && liftEq (\_ _ -> True) a a' && eq n n'
+    -- liftEq eq (Se r a b n) (Se r' a' b' n') = r == r' && liftEq (\_ _ -> True) a a' && eq n n'
+    -- liftEq _ _ _ =undefined
 
 instance Show a => Show1 (STypeF a) where
-    liftShowsPrec sp _ d (S role v n) = showsUnaryWith sp (unwords ["Send", show $ fromEnum role, show v]) d n
-    liftShowsPrec sp _ d (R role v n) = showsUnaryWith sp (unwords ["Recv", show $ fromEnum role, show v]) d n
-    -- replace the last value with Pure () so that it can be shown
-    liftShowsPrec sp _ d (B role a b n) = showsUnaryWith sp (unwords ["Branch", show $ fromEnum role, "left:", show (a >> Pure ()), "right:", show (b >> Pure ())]) d n
-    liftShowsPrec sp _ d (Se role a b n) = showsUnaryWith sp (unwords ["Select", show $ fromEnum role, "left:", show (a >> Pure ()), "right:", show (b >> Pure ())]) d n
+    -- liftShowsPrec sp _ d (S role v n) = showsUnaryWith sp (unwords ["S", show $ fromEnum role, show v]) d n
+    -- liftShowsPrec sp _ d (R role v n) = showsUnaryWith sp (unwords ["R", show $ fromEnum role, show v]) d n
+    -- liftShowsPrec sp _ d (B role a b n) = showsUnaryWith sp (unwords ["B", show $ fromEnum role, "l:", show (a >> Pure ()), "r:", show (b >> Pure ())]) d n
+    -- liftShowsPrec sp _ d (Se role a b n) = showsUnaryWith sp (unwords ["Se", show $ fromEnum role, "l:", show (a >> Pure ()), "r:", show (b >> Pure ())]) d n
+    -- liftShowsPrec sp _ d (Br roles a b n) = showsUnaryWith sp (unwords ["Br", show $ fmap fromEnum roles, "l:", show (a >> Pure ()), "r:", show (b >> Pure ())]) d n
+    liftShowsPrec sp _ d (S role v n) = showsUnaryWith sp ("!<" ++ (show $ fromEnum role) ++ "," ++ show v ++ ">.") d n
+    liftShowsPrec sp _ d (R role v n) = showsUnaryWith sp ("?<" ++ (show $ fromEnum role) ++ "," ++ show v ++ ">.") d n
+    liftShowsPrec sp _ d (Se role a b n) = showsUnaryWith sp ("⊕<" ++ (show $ fromEnum role) ++ "," ++ "{" ++ "L: " ++ show (a >> Pure ()) ++ ", " ++ "R: " ++ show (b >> Pure ()) ++ "}>") d n
+    liftShowsPrec sp _ d (B role a b n) = showsUnaryWith sp ("&<" ++ (show $ fromEnum role) ++ "," ++ "{" ++ "L: " ++ show (a >> Pure ()) ++ ", " ++ "R: " ++ show (b >> Pure ()) ++ "}>") d n
+    liftShowsPrec sp _ d (Br role a b n) = showsUnaryWith sp ("Br<" ++ (show $ fmap fromEnum role) ++ "," ++ "{" ++ "L: " ++ show (a >> Pure ()) ++ ", " ++ "R: " ++ show (b >> Pure ()) ++ "}>") d n
 
 type SType a next = Free (STypeF a) next
 

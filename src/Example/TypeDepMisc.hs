@@ -60,8 +60,8 @@ cgTest1 = do
 pcg0 = Process [snat|0|] cgTest0
 pcg1 = Process [snat|1|] cgTest1
 
-hello :: DualityCons xs => PList xs -> String
-hello _ = "f"
+hello :: DualityCons xs => PList xs -> Int
+hello _ = 1
 
-gk :: String
+gk :: Int
 gk = hello ps

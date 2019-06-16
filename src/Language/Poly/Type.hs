@@ -75,11 +75,11 @@ instance (SingI a, SingI b) => SingI ('PSum a b :: Poly Type) where
 
 type SPoly (t :: Poly Type) = Sing t
 
-instance Pretty (SPoly p) where
-  pretty FId = [ppr| "I" |]
-  pretty (FK x) = [ppr| "K" > x |]
-  pretty (FSum f g) = [ppr| f + "+" + g |]
-  pretty (FProd f g) = [ppr| f + "*" + g |]
+-- instance Pretty (SPoly p) where
+--   pretty FId = [ppr| "I" |]
+--   pretty (FK x) = [ppr| "K" > x |]
+--   pretty (FSum f g) = [ppr| f + "+" + g |]
+--   pretty (FProd f g) = [ppr| f + "*" + g |]
 
 infixl 5 :@:
 
