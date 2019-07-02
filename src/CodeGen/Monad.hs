@@ -50,6 +50,9 @@ evalCodeGen2 main entry ma = codeGenCombinedWithEntry2 main instrs st entry
   where
     (instrs, st) = unsafePerformIO $ runStateT (runCodeGen ma) initCodeGenState
 
+codeGenDs :: CodeGen IO [(Nat, Seq Instr)] -> CTranslUnit
+codeGenDs ma = undefined
+
 codeGenCombinedWithEntry
     :: [(Nat, Seq Instr)] -> CodeGenState -> EntryRole a b -> CTranslUnit
 codeGenCombinedWithEntry instrs st entry@EntryRole {..} = CTranslUnit

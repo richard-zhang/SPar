@@ -23,7 +23,6 @@ data SingleType a where
     UnitSingleType :: SingleType ()
     ProductSingleType :: (Typeable a, Typeable b) => SingleType a -> SingleType b -> SingleType (a, b)
     ListSingleType :: Typeable a => SingleType a -> SingleType [a]
-    FuncSingleType :: (Typeable a, Typeable b) => SingleType a -> SingleType b -> SingleType (a -> b)
 
 data ASingleType where
     ASingleType :: forall a. SingleType a -> ASingleType
@@ -39,7 +38,6 @@ equal (ProductSingleType a b) (ProductSingleType a' b') =
     equal a a' && equal b b'
 equal UnitSingleType       UnitSingleType         = True
 equal (ListSingleType a  ) (ListSingleType b    ) = a `equal` b
-equal (FuncSingleType a b) (FuncSingleType a' b') = equal a a' && equal b b'
 equal _                    _                      = False
 
 sTypeHeight :: SingleType a -> Int
@@ -49,7 +47,6 @@ sTypeHeight (SumSingleType     a b) = 1 + max (sTypeHeight a) (sTypeHeight b)
 sTypeHeight (ProductSingleType a b) = 1 + max (sTypeHeight a) (sTypeHeight b)
 sTypeHeight (UnitSingleType       ) = 0
 sTypeHeight (ListSingleType a     ) = 1 + sTypeHeight a
-sTypeHeight (FuncSingleType _ _   ) = error "func not height"
 
 compareSingleType :: SingleType a -> SingleType b -> Ordering
 compareSingleType a b
@@ -66,7 +63,6 @@ instance Show (SingleType a) where
     show (SumSingleType a b) = intercalate "_" ["Sum", show a, show b]
     show (ProductSingleType a b) = intercalate "_" ["Prod", show a, show b]
     show (ListSingleType a     )             = intercalate "_" ["List", show a]
-    show (FuncSingleType _ _   )             = error "not showable"
 
 instance Show ASingleType where
     show (ASingleType s) = show s
@@ -160,8 +156,6 @@ instance (Repr a, Repr b) => Repr (a, b) where
 instance Repr a => Repr [a] where
     singleType = ListSingleType singleType
 
-instance (Repr a, Repr b) => Repr (a -> b) where
-    singleType = FuncSingleType singleType singleType
 -- instance (Repr a, Repr b) => Repr (a -> b) where
 --     singleType = FuncSingleType singleType singleType
 

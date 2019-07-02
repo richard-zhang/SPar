@@ -60,6 +60,9 @@ preduce r = helper >>> (r *** r) >>> r
  where
   helper = (arr Id *** arr Fst) &&& (arr Snd >>> arr Snd)
 
+paraMap :: (Serialise a, Serialise b) => ArrowPipe a b -> ArrowPipe (a, (a, (a, a))) (b, (b, (b, b)))
+paraMap f = f *** f *** f *** f
+
 -- hylomorphism
 divConq
   :: (Serialise a, Serialise b, Serialise c)

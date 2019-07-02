@@ -16,6 +16,13 @@ static inline double get_time()
     return t.tv_sec + t.tv_usec*1e-6;
 }
 
+static inline debug(List_int a) {
+    if (a.size > 0) {
+        printf("%d\n", a.value[0]);
+        printf("%d\n", a.value[a.size - 1]);
+    }
+}
+
 static inline void quicksort(int *A, int len) {
     int_merge_sort_in_place(A, len);
 //   if (len < 2) return;

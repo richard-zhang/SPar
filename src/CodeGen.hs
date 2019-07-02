@@ -4,6 +4,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE GADTs #-}
 module CodeGen where
+import Control.Monad
 import           Control.Monad.Free
 import           Control.Monad.IO.Class
 import           Data.Sequence                  ( Seq )
@@ -15,6 +16,7 @@ import           System.Exit
 import           System.FilePath
 import           System.Directory
 import           Data.List.Split
+import           System.IO.Unsafe
 
 import           CodeGen.Data
 import           CodeGen.Monad
@@ -22,6 +24,7 @@ import           CodeGen.Type
 import           Language.Poly.Core
 import           RtDef
 import           Rt                             ( checkDual )
+import           ParPattern
 
 data ExtraContext = ExtraContext {
     ruleForPureCg :: CgRule
@@ -32,6 +35,14 @@ data CgRule where
     RReturn :: CgRule -- return statement when reaching Pure
     RAssign :: Int -> CgRule -- Assign value to the variable
     RIgnore :: CgRule -- ignore the result 
+
+codeGenTest :: Serialise a => a -> ArrowPipe a b -> FilePath -> [Double]
+codeGenTest a arrow path = unsafePerformIO $ 
+    codeGenTestCompile a arrow path >> codeGenTestRun path
+
+codeGenTestCompile :: Serialise a => a -> ArrowPipe a b -> FilePath -> IO ()
+codeGenTestCompile a arrow path =
+    codeGenBenchCompile1 a (runPipe1 zero arrow) path
 
 codeGenDebug :: Bool -> [AProcessRT] -> IO ()
 codeGenDebug isDebug xs = codeGenHelper defaultHeaders evalCodeGen xs isDebug
@@ -45,29 +56,47 @@ codeGenBenchCompile
 codeGenBenchCompile sourceData (xs, entry) dir =
     createDirectoryIfMissing True dir
         >> writeSource
-        >> writeHeader
         >> codeGenBenchBuildFile dir
   where
-    mainAST                = benchMain sourceData
-    (sourceAST, headerAST) = evalCodeGen2 mainAST entry $ traverseToCodeGen xs
-
-    -- dataPath               = removeLast </> "data.h"
-    sourcePath             = dir </> "code.c"
-
-    -- removeLast = joinPath $ init $ splitPath dir
-
+    mainAST        = benchMain sourceData
+    ma             = traverseToCodeGen xs
+    (sourceAST, _) = evalCodeGen2 mainAST entry ma
+    sourcePath     = dir </> "code.c"
     writeSource =
         writeFile sourcePath (headers ++ (show $ pretty sourceAST) ++ "\n")
-    writeHeader = return () -- writeFile dataPath dataHeader
-
-    headers     = concatMap
+    headers = concatMap
         ((++ "\n") . ("#include" ++))
         (  defaultHeaders
         ++ fmap ((++ "\"") . ("\"" ++)) ["../data.h", "../func.h"]
         )
 
+codeGenBenchCompile1
+    :: (Serialise a) => a -> ([AProcessRT], EntryRole a b) -> FilePath -> IO ()
+codeGenBenchCompile1 sourceData (xs, entry) dir =
+    createDirectoryIfMissing True dir
+        >> writeSource
+        >> writeHeader
+        >> codeGenBenchBuildFile dir
+  where
+    mainAST                = benchMain sourceData
+    ma                     = traverseToCodeGen xs
+    (sourceAST, headerAST) = evalCodeGen2 mainAST entry ma
+    sourcePath             = dir </> "code.c"
+    writeSource =
+        writeFile sourcePath (headers ++ (show $ pretty sourceAST) ++ "\n")
+    writeHeader = do
+        let dataDir = (takeDirectory dir </> "data.h")
+        isExist <- doesFileExist dataDir
+        if isExist then
+            return ()
+        else
+            writeFile dataDir dataHeader
+    headers     = concatMap
+        ((++ "\n") . ("#include" ++))
+        (  defaultHeaders
+        ++ fmap ((++ "\"") . ("\"" ++)) ["../data.h", "../func.h"]
+        )
     dataHeader = addIncludeGuard $ show $ pretty headerAST
-
     addIncludeGuard x = "#ifndef DATA_H\n#define DATA_H\n" ++ x ++ "\n#endif\n"
 
 -- error "the list of processes are not dual"
@@ -140,6 +169,18 @@ codeGenBenchRun path = do
         _           -> error "runtime error"
   where
     helper input = last $ init $ splitOn "\n" input
+    rmDir = removeDirectoryRecursive path
+
+codeGenTestRun :: FilePath -> IO [Double]
+codeGenTestRun path = do
+    (rcC, output, _) <- readCreateProcessWithExitCode
+        (shell $ "make run SRC=" ++ path)
+        []
+    case rcC of
+        ExitSuccess -> (return $ fmap read $ helper output)
+        _           -> error "runtime error"
+  where
+    helper input = tail $ init $ splitOn "\n" input
     rmDir = removeDirectoryRecursive path
 
 codeGenBuildRun :: Serialise a => [ProcessRT a] -> IO Bool

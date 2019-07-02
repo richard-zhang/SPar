@@ -15,6 +15,9 @@ testMergeSort = runPipe1 zero (mergeSort 1)
 
 expr = mergeSort 2
 
+debugTest :: ArrowPipe Int Int
+debugTest = arr $ Prim "result" undefined
+
 split :: Core ([Int] -> (Either (Either () Int) ([Int], [Int])))
 split = Prim "split" undefined
 

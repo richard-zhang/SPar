@@ -349,7 +349,7 @@ benchMain (sourceData :: a) = CFDefExt
   start =
     decl doubleTy (fromString "start") (Just $ (fromString "get_time") # [])
   call = (fromString "proc0") # [(fromString "a")]
-  debugPrint = fromString "printList" # [call]
+  debugPrint = fromString "debug" # [call]
   end = decl doubleTy (fromString "end") (Just $ (fromString "get_time") # [])
   printTime =
     (fromString "printf")
@@ -358,17 +358,17 @@ benchMain (sourceData :: a) = CFDefExt
         ]
   ret = creturn 0
   statements =
-    sourceDataDeclStatements "tmp" "a" stype sourceData
+    sourceDataDeclStatements 0 "tmp" "a" stype sourceData
       ++ [ CBlockDecl start
-         , CBlockStmt $ CExpr (Just call) undefNode
+         , CBlockStmt $ CExpr (Just debugPrint) undefNode
          , CBlockDecl end
          , CBlockStmt $ CExpr (Just printTime) undefNode
          , CBlockStmt ret
          ]
 
 sourceDataDeclStatements
-  :: String -> String -> SingleType a -> a -> [CBlockItem]
-sourceDataDeclStatements tmpName outputName s@(ListSingleType a) v =
+  :: Int -> String -> String -> SingleType a -> a -> [CBlockItem]
+sourceDataDeclStatements _count tmpName outputName s@(ListSingleType a) v =
   [CBlockDecl tmp, CBlockDecl varA]
  where
   arrayInit = initListExprs (fmap (stypeToCExpr a) v)
@@ -381,19 +381,22 @@ sourceDataDeclStatements tmpName outputName s@(ListSingleType a) v =
   rhs      = defCompoundLit
     (show s)
     [([], initExp sizeExpr), ([], initExp $ fromString tmpName)]
-sourceDataDeclStatements _tmpName outputName s@(ProductSingleType a b) v =
+sourceDataDeclStatements count _tmpName outputName s@(ProductSingleType a b) v =
   left ++ right ++ [CBlockDecl varA]
  where
-  varLeft  = "aLeft"
-  varRight = "aRight"
-  left     = sourceDataDeclStatements "tmpLeft" varLeft a (fst v)
-  right    = sourceDataDeclStatements "tmpRight" varRight b (snd v)
+  varLeft  = "aLeft" ++ show count
+  varRight = "aRight" ++ show count
+  left     = sourceDataDeclStatements (count + 1) "tmpLeft" varLeft a (fst v)
+  right    = sourceDataDeclStatements (count + 1) "tmpRight" varRight b (snd v)
   varA =
     decl (CTypeSpec $ stypeToTypeSpec s) (fromString outputName) (Just rhs)
   rhs = defCompoundLit
     (show s)
     [([], initExp $ fromString varLeft), ([], initExp $ fromString varRight)]
-sourceDataDeclStatements _ _ _ _ = undefined
+sourceDataDeclStatements _count _tmpName outputName s@(NumSingleType (IntegralNumType _)) v = [CBlockDecl varA]
+  where
+    varA = decl (CTypeSpec intSpec) (fromString outputName) (Just $ stypeToCExpr s v)
+sourceDataDeclStatements _ _ _ _ _ = undefined
 
 funcBodyHelper :: CID -> [Nat] -> [CBlockItem] -> [CBlockItem] -> [CBlockItem]
 funcBodyHelper cid roles middle end =
