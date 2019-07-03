@@ -40,6 +40,9 @@ voidSpec = CVoidType undefNode
 intSpec :: CTypeSpec
 intSpec = CIntType undefNode
 
+floatSpec :: CTypeSpec
+floatSpec = CFloatType undefNode
+
 idSpec :: String -> CTypeSpec
 idSpec str = CTypeDef (internalIdent str) undefNode
 

@@ -14,6 +14,7 @@ import           Data.List
 import           Foreign.Storable               ( Storable )
 
 type Serialise a = (Repr a, Show a, Read a)
+type CVal a = Serialise a
 
 -- need to find a way to represent recursive single type 
 data SingleType a where
@@ -23,6 +24,7 @@ data SingleType a where
     UnitSingleType :: SingleType ()
     ProductSingleType :: (Typeable a, Typeable b) => SingleType a -> SingleType b -> SingleType (a, b)
     ListSingleType :: Typeable a => SingleType a -> SingleType [a]
+    FuncSingleType :: (Typeable a, Typeable b) => SingleType a -> SingleType b -> SingleType (a -> b)
 
 data ASingleType where
     ASingleType :: forall a. SingleType a -> ASingleType
@@ -38,6 +40,7 @@ equal (ProductSingleType a b) (ProductSingleType a' b') =
     equal a a' && equal b b'
 equal UnitSingleType       UnitSingleType         = True
 equal (ListSingleType a  ) (ListSingleType b    ) = a `equal` b
+equal (FuncSingleType a b) (FuncSingleType a' b') = equal a a' && equal b b'
 equal _                    _                      = False
 
 sTypeHeight :: SingleType a -> Int
@@ -47,6 +50,7 @@ sTypeHeight (SumSingleType     a b) = 1 + max (sTypeHeight a) (sTypeHeight b)
 sTypeHeight (ProductSingleType a b) = 1 + max (sTypeHeight a) (sTypeHeight b)
 sTypeHeight (UnitSingleType       ) = 0
 sTypeHeight (ListSingleType a     ) = 1 + sTypeHeight a
+sTypeHeight (FuncSingleType _ _   ) = error "Func not height"
 
 compareSingleType :: SingleType a -> SingleType b -> Ordering
 compareSingleType a b
@@ -98,9 +102,6 @@ data IntegralDict a where
     IntegralDict :: ( Typeable a, Bounded a, Eq a, Ord a, Show a
                     , Bits a, FiniteBits a, Integral a, Num a, Real a, Storable a )
                     => IntegralDict a
-    -- IntegralDict :: ( Bounded a, Eq a, Ord a, Show a
-                    -- , Bits a, FiniteBits a, Integral a, Num a, Real a, Storable a )
-                    -- => IntegralDict a
 
 data FloatingDict a where
     FloatingDict :: ( Typeable a, Eq a, Ord a, Show a
@@ -156,17 +157,5 @@ instance (Repr a, Repr b) => Repr (a, b) where
 instance Repr a => Repr [a] where
     singleType = ListSingleType singleType
 
--- instance (Repr a, Repr b) => Repr (a -> b) where
---     singleType = FuncSingleType singleType singleType
-
--- ty1 = ListSingleType (singleType :: SingleType Int)
--- ty2 = ProductSingleType ty1 ty1
--- ty3 = SumSingleType UnitSingleType (singleType :: SingleType Int)
--- ty4 = SumSingleType ty3 ty2
-
--- ty1' = toASingleType ty1
--- ty2' = toASingleType ty2
--- ty3' = toASingleType ty3
--- ty4' = toASingleType ty4
-
--- ts = [ty1', ty2', ty3', ty4']
+instance (Repr a, Repr b) => Repr (a -> b) where
+    singleType = FuncSingleType singleType singleType

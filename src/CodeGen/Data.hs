@@ -396,6 +396,9 @@ sourceDataDeclStatements count _tmpName outputName s@(ProductSingleType a b) v =
 sourceDataDeclStatements _count _tmpName outputName s@(NumSingleType (IntegralNumType _)) v = [CBlockDecl varA]
   where
     varA = decl (CTypeSpec intSpec) (fromString outputName) (Just $ stypeToCExpr s v)
+sourceDataDeclStatements _count _tmpName outputName s@(NumSingleType (FloatingNumType _)) v = [CBlockDecl varA]
+  where
+    varA = decl (CTypeSpec floatSpec) (fromString outputName) (Just $ stypeToCExpr s v)
 sourceDataDeclStatements _ _ _ _ _ = undefined
 
 funcBodyHelper :: CID -> [Nat] -> [CBlockItem] -> [CBlockItem] -> [CBlockItem]

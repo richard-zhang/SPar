@@ -1,7 +1,6 @@
 {-# LANGUAGE GADTs #-}
 module Language.Poly.Core2 where
-import           Data.Type.Natural
-import           Control.Monad.Free
+import           CodeGen.Type
 
 data Core a where
     Lit :: a -> Core a
@@ -11,7 +10,8 @@ data Core a where
              -> a -- Semantics in Haskell of the primitive function
              -> Core a
 
-    Ap :: Core (a -> b) -> Core a -> Core b
+    (:$) :: Core (a -> b) -> Core a -> Core b
+    Comp :: Core (b -> c) -> Core (a -> b) -> Core (a -> c)
 
     Id :: Core (a -> a)
     Const :: Core a -> Core (b -> a)
@@ -23,27 +23,6 @@ data Core a where
     Inl :: Core (a -> Either a b)
     Inr :: Core (b -> Either a b)
 
-
-
-data ProcF next where
-    Send :: Nat -> Core a -> next -> ProcF next
-
-    Recv :: Nat -> (Core a -> next) -> ProcF next
-
-    Select :: Nat
-           -> Core (Either a b)
-           -> (Core a -> Proc c)
-           -> (Core b -> Proc c)
-           -> next
-           -> ProcF next
-
-    Branch :: Nat -> Proc c -> Proc c -> (Core c -> next) -> ProcF next
-
-    Broadcast :: [Nat]
-              -> Core (Either a b)
-              -> (Core a -> Proc c)
-              -> (Core b -> Proc c)
-              -> (Core c -> next)
-              -> ProcF next
-
-type Proc a = Free ProcF (Core a)
+    Swap :: Core (((a,b), (c, d)) -> ((a, c), (b, d)))
+    (:&&&) :: Core (a -> b) -> Core (a -> c) -> Core (a -> (b, c))
+    (:***) :: Core (a -> c) -> Core (b -> d) -> Core ((a, b) -> (c, d))
