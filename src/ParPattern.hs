@@ -20,7 +20,7 @@ import           Data.Type.Natural
 import           Data.Maybe
 import           Type.Reflection
 
-import           Language.Poly.Core
+import           Language.Poly.Core2
 import           RtDef
 import           CodeGen.Type
 import           CodeGen.Data
@@ -42,11 +42,6 @@ data Pipe a (b  :: Type) =
 
 type ArrowPipe a b = Nat -> Pipe a b
 
-
-type family Vec (n :: Nat) (a :: Type) where
-   Vec 'Z a = ()
-   Vec ('S n) a = (a, Vec n a)
-
 pmap
   :: (Serialise a, Serialise b)
   => ArrowPipe a b
@@ -57,10 +52,12 @@ pmap f s c = s >>> (f *** (f *** (f *** f))) >>> c
 
 preduce :: (Serialise a) => ArrowPipe (a, a) a -> ArrowPipe (a, (a, (a, a))) a
 preduce r = helper >>> (r *** r) >>> r
- where
-  helper = (arr Id *** arr Fst) &&& (arr Snd >>> arr Snd)
+  where helper = (arr Id *** arr Fst) &&& (arr Snd >>> arr Snd)
 
-paraMap :: (Serialise a, Serialise b) => ArrowPipe a b -> ArrowPipe (a, (a, (a, a))) (b, (b, (b, b)))
+paraMap
+  :: (Serialise a, Serialise b)
+  => ArrowPipe a b
+  -> ArrowPipe (a, (a, (a, a))) (b, (b, (b, b)))
 paraMap f = f *** f *** f *** f
 
 -- hylomorphism
@@ -547,8 +544,8 @@ bind3 (AProcRTFunc ty func) (AProcRTFunc ty2 (func2 :: Core c -> ProcRT b)) =
   where rep = typeRep :: TypeRep c
 
 bind3Force :: AProcRTFunc a -> AProcRTFunc b -> AProcRTFunc a
-bind3Force (AProcRTFunc ty func) (AProcRTFunc ty2 (func2 :: Core c -> ProcRT b)) =
-  case ty `eqTypeRep` rep of
+bind3Force (AProcRTFunc ty func) (AProcRTFunc ty2 (func2 :: Core c -> ProcRT b))
+  = case ty `eqTypeRep` rep of
     Just HRefl -> AProcRTFunc ty2 (func >=> forcedEval' >=> func2)
     Nothing    -> error "Two AProcRTFunc are not compatible"
   where rep = typeRep :: TypeRep c

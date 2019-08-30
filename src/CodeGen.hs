@@ -21,7 +21,7 @@ import           System.IO.Unsafe
 import           CodeGen.Data
 import           CodeGen.Monad
 import           CodeGen.Type
-import           Language.Poly.Core
+import           Language.Poly.Core2
 import           RtDef
 import           Rt                             ( checkDual )
 import           ParPattern
@@ -88,7 +88,7 @@ codeGenBenchCompile1 sourceData (xs, entry) dir =
         let dataDir = (takeDirectory dir </> "data.h")
         isExist <- doesFileExist dataDir
         if isExist then
-            return ()
+            writeFile dataDir dataHeader-- return ()
         else
             writeFile dataDir dataHeader
     headers     = concatMap

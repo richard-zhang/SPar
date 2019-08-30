@@ -20,7 +20,7 @@ import           Def                     hiding ( return
                                                 , (>>)
                                                 , (>>=)
                                                 )
-import           Language.Poly.Core
+import           Language.Poly.Core2
 import           Type
 import           Type.Reflection
 import           TypeValue

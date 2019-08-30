@@ -19,7 +19,7 @@ import           System.IO.Unsafe
 
 import           CodeGen.Type
 import           CodeGen.Utils
-import           Language.Poly.Core
+import           Language.Poly.Core2
 
 type CID = Int
 
@@ -152,7 +152,22 @@ convertToCExpr (Exp (expr :: Core a) stype) = case expr of
   Pair l r -> productCExp (Exp l $ getLeftProdType stype)
                           (Exp r $ getRightProdType stype)
                           stype
-  _ -> undefined
+  (x :$ subExp) -> convertToCExpr (Exp x singleType) # [convertToCExpr (Exp subExp singleType)]
+  x -> error $ showDebug x
+
+auxConvert :: Core a -> CExpr
+auxConvert expr = fromString (getFuncName expr) # (getCoreList expr)
+  where
+    getFuncName :: Core a -> String
+    getFuncName ((Prim x _) :$ _) = x
+    getFuncName (x :$ _) = getFuncName x
+    getFuncName _ = error "not multi-param function"
+
+    getCoreList :: Core a -> [CExpr] 
+    getCoreList ((Prim _ _) :$ param) = [convertToCExpr (Exp param singleType)]
+    getCoreList (x :$ param) = getCoreList x ++ [convertToCExpr (Exp param singleType)]
+    getCoreList _ = error "not param wierd"
+
 
 printDebug :: Exp a -> CExpr
 printDebug = debugPrint . samplingCExpr

@@ -17,7 +17,7 @@ import           System.IO.Unsafe
 
 import           CodeGen.Data
 import           CodeGen.Type
-import           Language.Poly.Core
+import           Language.Poly.Core2
 
 data CodeGenState = CodeGenState
   {
@@ -180,7 +180,7 @@ getChannelAndUpdateChanTable2 key _ = do
         Nothing  -> createAndAddChannel2 key
 
 updateDataStructCollectFromCore
-    :: (Serialise a, Monad m) => Core a -> CodeGen m ()
+    :: (Repr a, Monad m) => Core a -> CodeGen m ()
 updateDataStructCollectFromCore ((_func :: Core (a -> b)) :$ v) =
     updateDataStructCollect (singleType :: SingleType a)
         >> updateDataStructCollectFromCore v

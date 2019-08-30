@@ -1,6 +1,7 @@
 module Main where
 import Spar
 import Control.Monad
+import FFT
 
 main :: IO ()
 -- main = codeGenDebug1 False testMergeSort
@@ -11,4 +12,8 @@ main :: IO ()
 -- main = codeGenBenchCompile(let size = 2^20 in (take size [1,1..], take size [1,1..])) testDotProd "benchmark/dotprod/test" 
 -- main = codeGenBenchCompile[5,4,3,2,1,2,3,4,5,6,6,7] testMergeSort "benchmark/mergesort/test"
 -- main = putStrLn "hello, world"
-main = benchmarkNewEntry "benchmark" 1 [0,1] [0 .. 2] [2..5] 
+-- main = benchmarkNewEntry "benchmark" 1 [0,1] [0 .. 2] [2..5] 
+-- main = codeGenTestCompile [(1.0, 1.0), (1.0, 1.0), (1.0, 1.0), (1.0, 1.0)] cfft4Core "benchmark/fft/test"
+main = do
+    let _ = codegenZWT
+    return ()

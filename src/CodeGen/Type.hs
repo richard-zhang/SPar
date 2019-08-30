@@ -12,6 +12,7 @@ import           Data.Bits
 import           Data.Typeable
 import           Data.List
 import           Foreign.Storable               ( Storable )
+import           Data.Complex
 
 type Serialise a = (Repr a, Show a, Read a)
 type CVal a = Serialise a
@@ -20,11 +21,11 @@ type CVal a = Serialise a
 data SingleType a where
     NumSingleType :: NumType a -> SingleType a
     LabelSingleType :: SingleType Label
-    SumSingleType :: (Typeable a, Typeable b) => SingleType a -> SingleType b -> SingleType (Either a b)
+    SumSingleType :: SingleType a -> SingleType b -> SingleType (Either a b)
     UnitSingleType :: SingleType ()
-    ProductSingleType :: (Typeable a, Typeable b) => SingleType a -> SingleType b -> SingleType (a, b)
-    ListSingleType :: Typeable a => SingleType a -> SingleType [a]
-    FuncSingleType :: (Typeable a, Typeable b) => SingleType a -> SingleType b -> SingleType (a -> b)
+    ProductSingleType :: SingleType a -> SingleType b -> SingleType (a, b)
+    ListSingleType :: SingleType a -> SingleType [a]
+    FuncSingleType :: SingleType a -> SingleType b -> SingleType (a -> b)
 
 data ASingleType where
     ASingleType :: forall a. SingleType a -> ASingleType

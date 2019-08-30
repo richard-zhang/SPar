@@ -20,7 +20,7 @@ import qualified Control.Monad.Indexed.Free    as F
 import           Data.Kind
 import           Data.Singletons
 import           Data.Type.Natural              ( Nat )
-import           Language.Poly.Core             ( Core(..)
+import           Language.Poly.Core2             ( Core(..)
                                                 , Serialise
                                                 )
 import           Prelude                 hiding ( return
@@ -67,7 +67,7 @@ select
     -> (Core a -> Proc' left ( 'Pure ()) c)
     -> (Core b -> Proc' right ( 'Pure ()) c)
     -> Proc ( 'Free ( 'Se n left right ( 'Pure ()))) ()
-select role var cont1 cont2 = liftF' $ Select role var cont1 cont2 Unit
+select role var cont1 cont2 = liftF' $ Select role var cont1 cont2 (Lit ())
 
 branch
     :: (Serialise c)
@@ -75,7 +75,7 @@ branch
     -> Proc' left ( 'Pure ()) c
     -> Proc' right ( 'Pure ()) c
     -> Proc ( 'Free ( 'B n left right ( 'Pure ()))) ()
-branch role one two = liftF' $ Branch role one two Unit
+branch role one two = liftF' $ Branch role one two (Lit ())
 
 (>>=) :: IxMonad m => m i j a -> (a -> m j k b) -> m i k b
 (>>=) = (>>>=)

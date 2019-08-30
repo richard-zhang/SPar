@@ -13,7 +13,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE GADTs #-}
-module Test where
+module Test () where
 
 import Control.Arrow
 import Data.Complex

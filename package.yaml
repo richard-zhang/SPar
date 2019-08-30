@@ -18,6 +18,7 @@ tests:
 copyright: Copyright (c) 2019 Shuhao Zhang
 maintainer: rzsh2003@gmail.com
 dependencies:
+- equational-reasoning >= 0.5 && < 0.6
 - optparse-applicative >= 0.14 && < 0.15
 - store >= 0.5 && < 0.6
 - bytestring

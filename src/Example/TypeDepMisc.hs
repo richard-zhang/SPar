@@ -19,7 +19,7 @@ import           Prelude                 hiding ( return
                                                 , (>>=)
                                                 )
 import           Def
-import           Language.Poly.Core
+import           Language.Poly.Core2
 import           Data.Type.Natural              ( snat )
 
 test = do

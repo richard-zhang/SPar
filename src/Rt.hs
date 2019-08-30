@@ -21,7 +21,7 @@ import Data.List (intercalate)
 import qualified Data.Map.Strict as Map
 import Data.Type.Natural (Nat)
 import Def hiding (return, (>>), (>>=))
-import Language.Poly.Core
+import Language.Poly.Core2
 import RtDef
 import TypeValue
 

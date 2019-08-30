@@ -3,4 +3,4 @@ module Language.Poly
   ) where
 
 import Language.Poly.Type as X
-import Language.Poly.Core as X
+import Language.Poly.Core2 as X
