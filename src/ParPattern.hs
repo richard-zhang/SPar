@@ -66,7 +66,7 @@ swapAway proxy n func startRole = case (proofA, proofB) of
  where
   sender = case proofA of
     SDict -> toAProcRTFunc $ sendHelper proxy n (startRole + 1)
-  endRole   = toEnum $ (fromEnum (startRole + 1)) + totalNode + 1
+  endRole   = toEnum $ (fromEnum (startRole + 1)) + totalNode
 
   totalNode = (2 ^ (sNatToInt n :: Integer) :: Int)
 
@@ -80,7 +80,7 @@ swapAway proxy n func startRole = case (proofA, proofB) of
     return (Lit ())
   roles =
     fmap toEnum
-      $ [fromEnum $ startRole + 1 .. (fromEnum (startRole + 1)) + totalNode]
+      $ [fromEnum $ startRole + 1 .. (fromEnum (startRole + 1)) + totalNode - 1]
 
   myEnv =
     Map.insert endRole recvProc $ Map.fromAscList $ zip roles (repeat mkProc)
@@ -93,7 +93,7 @@ receiveHelper a (SS n) startRole = do
   x <- receiveHelper a n startRole
   y <- receiveHelper a n (toEnum startRoleRight)
   return (Pair x y)
-  where startRoleRight = (fromEnum startRole) + (sNatToInt n)
+  where startRoleRight = (fromEnum startRole) + (2 ^ sNatToInt n)
 
 sendHelper
   :: (Serialise a)

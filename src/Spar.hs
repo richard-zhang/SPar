@@ -11,4 +11,5 @@ import           Example.Wordcount             as X
 import           Example.Miscellaneous         as X
 import           Example.ConvexHull            as X
 import           Example.NewDotProd            as X
+import           Example.FFT                   as X
 import           Bench                         as X

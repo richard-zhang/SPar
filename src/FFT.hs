@@ -116,11 +116,11 @@ cfft (SS x) = case getSDict x (Proxy :: Proxy [Complex Float]) of
 
 cfastFourierR :: SNat n -> Core ([Complex Float] -> [Complex Float])
 cfastFourierR cores = case getSDict cores (Proxy :: Proxy [Complex Float]) of
-    SDict -> opt
-        (    opt (caddPadding cores)
-        :>>> opt (csplitL cores)
-        :>>> opt (cfft cores)
-        :>>> opt (cmerge cores)
+    SDict ->
+        (    caddPadding cores
+        :>>> csplitL cores
+        :>>> cfft cores
+        :>>> cmerge cores
         )
 
 cfastFourier

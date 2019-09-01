@@ -102,7 +102,11 @@ codeGenCombinedWithEntry2 main instrs st entry@EntryRole {..} =
     channelDecls = chanDecls cid
     roles        = fmap fst instrs
     sumTypeDecls =
-        fmap (CDeclExt . dataStructDecl) $ Set.toList $ dataStructCollect st
+        fmap (CDeclExt . dataStructDecl)
+            $ Set.toList
+            $ Set.insert (ASingleType endType)
+            $ Set.insert (ASingleType startType)
+            $ dataStructCollect st
     entryFuncDecl =
         [CFDefExt $ entryFunc entry sendChanCid recvChanCid cid roles]
     funcsRt     = fmap (CFDefExt . uncurry instrToFuncRt) instrs
@@ -179,8 +183,7 @@ getChannelAndUpdateChanTable2 key _ = do
         Just cid -> return cid
         Nothing  -> createAndAddChannel2 key
 
-updateDataStructCollectFromCore
-    :: (Repr a, Monad m) => Core a -> CodeGen m ()
+updateDataStructCollectFromCore :: (Repr a, Monad m) => Core a -> CodeGen m ()
 updateDataStructCollectFromCore ((_func :: Core (a -> b)) :$ v) =
     updateDataStructCollect (singleType :: SingleType a)
         >> updateDataStructCollectFromCore v

@@ -152,21 +152,23 @@ convertToCExpr (Exp (expr :: Core a) stype) = case expr of
   Pair l r -> productCExp (Exp l $ getLeftProdType stype)
                           (Exp r $ getRightProdType stype)
                           stype
-  (x :$ subExp) -> convertToCExpr (Exp x singleType) # [convertToCExpr (Exp subExp singleType)]
+  (x :$ subExp) ->
+    convertToCExpr (Exp x singleType) # [convertToCExpr (Exp subExp singleType)]
   x -> error $ showDebug x
 
 auxConvert :: Core a -> CExpr
 auxConvert expr = fromString (getFuncName expr) # (getCoreList expr)
-  where
-    getFuncName :: Core a -> String
-    getFuncName ((Prim x _) :$ _) = x
-    getFuncName (x :$ _) = getFuncName x
-    getFuncName _ = error "not multi-param function"
+ where
+  getFuncName :: Core a -> String
+  getFuncName ((Prim x _) :$ _) = x
+  getFuncName (x          :$ _) = getFuncName x
+  getFuncName _                 = error "not multi-param function"
 
-    getCoreList :: Core a -> [CExpr] 
-    getCoreList ((Prim _ _) :$ param) = [convertToCExpr (Exp param singleType)]
-    getCoreList (x :$ param) = getCoreList x ++ [convertToCExpr (Exp param singleType)]
-    getCoreList _ = error "not param wierd"
+  getCoreList :: Core a -> [CExpr]
+  getCoreList ((Prim _ _) :$ param) = [convertToCExpr (Exp param singleType)]
+  getCoreList (x :$ param) =
+    getCoreList x ++ [convertToCExpr (Exp param singleType)]
+  getCoreList _ = error "not param wierd"
 
 
 printDebug :: Exp a -> CExpr
@@ -373,7 +375,7 @@ benchMain (sourceData :: a) = CFDefExt
         ]
   ret = creturn 0
   statements =
-    sourceDataDeclStatements 0 "tmp" "a" stype sourceData
+    (fst $ sourceDataDeclStatements 1 "tmp" "a" stype sourceData)
       ++ [ CBlockDecl start
          , CBlockStmt $ CExpr (Just debugPrint) undefNode
          , CBlockDecl end
@@ -382,9 +384,9 @@ benchMain (sourceData :: a) = CFDefExt
          ]
 
 sourceDataDeclStatements
-  :: Int -> String -> String -> SingleType a -> a -> [CBlockItem]
-sourceDataDeclStatements _count tmpName outputName s@(ListSingleType a) v =
-  [CBlockDecl tmp, CBlockDecl varA]
+  :: Int -> String -> String -> SingleType a -> a -> ([CBlockItem], Int)
+sourceDataDeclStatements count tmpName outputName s@(ListSingleType a) v =
+  ([CBlockDecl tmp, CBlockDecl varA], count)
  where
   arrayInit = initListExprs (fmap (stypeToCExpr a) v)
   tmp       = CDecl [CTypeSpec $ stypeToTypeSpec a]
@@ -396,24 +398,30 @@ sourceDataDeclStatements _count tmpName outputName s@(ListSingleType a) v =
   rhs      = defCompoundLit
     (show s)
     [([], initExp sizeExpr), ([], initExp $ fromString tmpName)]
-sourceDataDeclStatements count _tmpName outputName s@(ProductSingleType a b) v =
-  left ++ right ++ [CBlockDecl varA]
+sourceDataDeclStatements count _tmpName outputName s@(ProductSingleType a b) v
+  = (left ++ right ++ [CBlockDecl varA], rightCount)
  where
   varLeft  = "aLeft" ++ show count
   varRight = "aRight" ++ show count
-  left     = sourceDataDeclStatements (count + 1) "tmpLeft" varLeft a (fst v)
-  right    = sourceDataDeclStatements (count + 1) "tmpRight" varRight b (snd v)
+  (left, leftCount) =
+    sourceDataDeclStatements (count + 1) "tmpLeft" varLeft a (fst v)
+  (right, rightCount) =
+    sourceDataDeclStatements (leftCount + 1) "tmpRight" varRight b (snd v)
   varA =
     decl (CTypeSpec $ stypeToTypeSpec s) (fromString outputName) (Just rhs)
   rhs = defCompoundLit
     (show s)
     [([], initExp $ fromString varLeft), ([], initExp $ fromString varRight)]
-sourceDataDeclStatements _count _tmpName outputName s@(NumSingleType (IntegralNumType _)) v = [CBlockDecl varA]
-  where
-    varA = decl (CTypeSpec intSpec) (fromString outputName) (Just $ stypeToCExpr s v)
-sourceDataDeclStatements _count _tmpName outputName s@(NumSingleType (FloatingNumType _)) v = [CBlockDecl varA]
-  where
-    varA = decl (CTypeSpec floatSpec) (fromString outputName) (Just $ stypeToCExpr s v)
+sourceDataDeclStatements count _tmpName outputName s@(NumSingleType (IntegralNumType _)) v
+  = ([CBlockDecl varA], count)
+ where
+  varA =
+    decl (CTypeSpec intSpec) (fromString outputName) (Just $ stypeToCExpr s v)
+sourceDataDeclStatements count _tmpName outputName s@(NumSingleType (FloatingNumType _)) v
+  = ([CBlockDecl varA], count)
+ where
+  varA =
+    decl (CTypeSpec floatSpec) (fromString outputName) (Just $ stypeToCExpr s v)
 sourceDataDeclStatements _ _ _ _ _ = undefined
 
 funcBodyHelper :: CID -> [Nat] -> [CBlockItem] -> [CBlockItem] -> [CBlockItem]

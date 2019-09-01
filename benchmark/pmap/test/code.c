@@ -120,13 +120,13 @@ Prod_int_Prod_int_Prod_int_int proc0(Prod_int_Prod_int_Prod_int_int v0)
 }
 int main()
 {
-    int aLeft0 = 1;
     int aLeft1 = 1;
-    int aLeft2 = 1;
-    int aRight2 = 1;
-    Prod_int_int aRight1 = (Prod_int_int) {aLeft2, aRight2};
-    Prod_int_Prod_int_int aRight0 = (Prod_int_Prod_int_int) {aLeft1, aRight1};
-    Prod_int_Prod_int_Prod_int_int a = (Prod_int_Prod_int_Prod_int_int) {aLeft0, aRight0};
+    int aLeft3 = 1;
+    int aLeft5 = 1;
+    int aRight5 = 1;
+    Prod_int_int aRight3 = (Prod_int_int) {aLeft5, aRight5};
+    Prod_int_Prod_int_int aRight1 = (Prod_int_Prod_int_int) {aLeft3, aRight3};
+    Prod_int_Prod_int_Prod_int_int a = (Prod_int_Prod_int_Prod_int_int) {aLeft1, aRight1};
     double start = get_time();
     debug(proc0(a));
     double end = get_time();
