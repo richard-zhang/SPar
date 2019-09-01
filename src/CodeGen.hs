@@ -4,7 +4,6 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE GADTs #-}
 module CodeGen where
-import Control.Monad
 import           Control.Monad.Free
 import           Control.Monad.IO.Class
 import           Data.Sequence                  ( Seq )
@@ -37,8 +36,8 @@ data CgRule where
     RIgnore :: CgRule -- ignore the result 
 
 codeGenTest :: Serialise a => a -> ArrowPipe a b -> FilePath -> [Double]
-codeGenTest a arrow path = unsafePerformIO $ 
-    codeGenTestCompile a arrow path >> codeGenTestRun path
+codeGenTest a arrow path =
+    unsafePerformIO $ codeGenTestCompile a arrow path >> codeGenTestRun path
 
 codeGenTestCompile :: Serialise a => a -> ArrowPipe a b -> FilePath -> IO ()
 codeGenTestCompile a arrow path =
@@ -87,11 +86,10 @@ codeGenBenchCompile1 sourceData (xs, entry) dir =
     writeHeader = do
         let dataDir = (takeDirectory dir </> "data.h")
         isExist <- doesFileExist dataDir
-        if isExist then
-            writeFile dataDir dataHeader-- return ()
-        else
-            writeFile dataDir dataHeader
-    headers     = concatMap
+        if isExist
+            then writeFile dataDir dataHeader-- return ()
+            else writeFile dataDir dataHeader
+    headers = concatMap
         ((++ "\n") . ("#include" ++))
         (  defaultHeaders
         ++ fmap ((++ "\"") . ("\"" ++)) ["../data.h", "../func.h"]

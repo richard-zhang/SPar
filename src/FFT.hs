@@ -19,7 +19,7 @@ import           Data.Proxy
 import           GHC.TypeLits
 
 import           Language.Poly.Core2
-import           Language.Nat
+import           Language.Poly.Nat
 import           ParPattern
 import           CodeGen.Type
 import           CodeGen
@@ -41,7 +41,7 @@ caddc = Prim "addc" undefined
 csubc :: Core (([Complex Float], [Complex Float]) -> [Complex Float])
 csubc = Prim "subc" undefined
 
-caddPadding :: SINat n -> Core ([a] -> [a])
+caddPadding :: SNat n -> Core ([a] -> [a])
 caddPadding _ = Prim "addPadding" undefined
 
 cconcatenate :: Core (([a], [a]) -> [a])
@@ -51,25 +51,25 @@ cmulexp :: Core (Int -> Int -> [Complex Float] -> [Complex Float])
 cmulexp = Prim "cmulexp" undefined
 
 -- core zone
-csplitL :: SINat n -> Core ([Complex Float] -> Tree n [Complex Float])
+csplitL :: SNat n -> Core ([Complex Float] -> Tree n [Complex Float])
 csplitL SZ     = Id
-csplitL (SS n) = case getDict n (Proxy :: Proxy [Complex Float]) of
+csplitL (SS n) = case getSDict n (Proxy :: Proxy [Complex Float]) of
     SDict -> csplitList :>>> (csplitL n :*** csplitL n)
 
-cmerge :: SINat n -> Core (Tree n [Complex Float] -> [Complex Float])
+cmerge :: SNat n -> Core (Tree n [Complex Float] -> [Complex Float])
 cmerge SZ     = Id
-cmerge (SS n) = case getDict n (Proxy :: Proxy [Complex Float]) of
+cmerge (SS n) = case getSDict n (Proxy :: Proxy [Complex Float]) of
     SDict -> (cmerge n :*** cmerge n) :>>> cconcatenate
 
 czwT
-    :: SINat n
+    :: SNat n
     -> Core (([Complex Float], [Complex Float]) -> [Complex Float])
     -> Core
            (  (Tree n [Complex Float], Tree n [Complex Float])
            -> Tree n [Complex Float]
            )
 czwT SZ     f = f
-czwT (SS n) f = case getDict n (Proxy :: Proxy [Complex Float]) of
+czwT (SS n) f = case getSDict n (Proxy :: Proxy [Complex Float]) of
     SDict -> Swap :>>> (czwT n f :*** czwT n f)
 
 testf :: Core ((Int, Int) -> Int)
@@ -78,44 +78,44 @@ testf = Prim "test" undefined
 testSwap :: Core (((a, b), (c, d)) -> ((a, c), (b, d)))
 testSwap = Prim "swap" undefined
 
-testzwT' :: SINat n -> Core ((Tree n Int, Tree n Int) -> Tree n Int)
+testzwT' :: SNat n -> Core ((Tree n Int, Tree n Int) -> Tree n Int)
 testzwT' SZ     = testf
-testzwT' (SS n) = case getDict n (Proxy :: Proxy Int) of
+testzwT' (SS n) = case getSDict n (Proxy :: Proxy Int) of
     SDict -> testSwap :>>> (testzwT' n :*** testzwT' n)
 
 testzwT
     :: forall n
-     . (KnownNat n, IsSing (FromNat n))
+     . (KnownNat n, SingI (FromNat n))
     => Core
            (  (Tree (FromNat n) Int, Tree (FromNat n) Int)
            -> Tree (FromNat n) Int
            )
-testzwT = testzwT' (sing :: SINat (FromNat n))
+testzwT = testzwT' (sing :: SNat (FromNat n))
 
-testTree :: SINat n -> SingleType (Tree n [Complex Float])
+testTree :: SNat n -> SingleType (Tree n [Complex Float])
 testTree SZ     = singleType
 testTree (SS x) = ProductSingleType (testTree x) (testTree x)
 
 cfmapTIx
-    :: SINat n
+    :: SNat n
     -> Core (Int -> [Complex Float] -> [Complex Float])
     -> Int
     -> Core (Tree n [Complex Float] -> Tree n [Complex Float])
 cfmapTIx SZ     f k = f :$ (Lit k)
-cfmapTIx (SS x) f k = case getDict x (Proxy :: Proxy [Complex Float]) of
-    SDict -> cfmapTIx x f k :*** cfmapTIx x f (k + (2 ^ fromINat x))
+cfmapTIx (SS x) f k = case getSDict x (Proxy :: Proxy [Complex Float]) of
+    SDict -> cfmapTIx x f k :*** cfmapTIx x f (k + (2 ^ sNatToInt x))
 
-cfft :: SINat n -> Core (Tree n [Complex Float] -> Tree n [Complex Float])
+cfft :: SNat n -> Core (Tree n [Complex Float] -> Tree n [Complex Float])
 cfft SZ     = cbaseFFT
-cfft (SS x) = case getDict x (Proxy :: Proxy [Complex Float]) of
+cfft (SS x) = case getSDict x (Proxy :: Proxy [Complex Float]) of
     SDict ->
         (cfft x :*** cfft x)
             :>>> (Id :*** cfmapTIx x (cmulexp :$ (Lit p2sx)) 0)
             :>>> (czwT x caddc :&&& czwT x csubc)
-        where p2sx = 2 ^ fromINat (SS x)
+        where p2sx = 2 ^ sNatToInt (SS x)
 
-cfastFourierR :: SINat n -> Core ([Complex Float] -> [Complex Float])
-cfastFourierR cores = case getDict cores (Proxy :: Proxy [Complex Float]) of
+cfastFourierR :: SNat n -> Core ([Complex Float] -> [Complex Float])
+cfastFourierR cores = case getSDict cores (Proxy :: Proxy [Complex Float]) of
     SDict -> opt
         (    opt (caddPadding cores)
         :>>> opt (csplitL cores)
@@ -125,9 +125,9 @@ cfastFourierR cores = case getDict cores (Proxy :: Proxy [Complex Float]) of
 
 cfastFourier
     :: forall n
-     . (KnownNat n, IsSing (FromNat n))
+     . (KnownNat n, SingI (FromNat n))
     => Core ([Complex Float] -> [Complex Float])
-cfastFourier = cfastFourierR (sing :: SINat (FromNat n))
+cfastFourier = cfastFourierR (sing :: SNat (FromNat n))
 
 cfft4Core :: ArrowPipe [Complex Float] [Complex Float]
 cfft4Core = c2a $ (cfastFourier @1)

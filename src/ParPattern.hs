@@ -7,6 +7,7 @@
 {-# LANGUAGE ScopedTypeVariables       #-}
 {-# LANGUAGE TypeInType                #-}
 {-# LANGUAGE KindSignatures            #-}
+{-# LANGUAGE TypeOperators            #-}
 module ParPattern where
 
 import           Control.Monad
@@ -17,10 +18,18 @@ import qualified Data.Set                      as Set
 import           Data.Tuple
 import           Data.Kind
 import           Data.Type.Natural
-import           Data.Maybe
 import           Type.Reflection
+import           Data.Maybe
+import           Data.Type.Natural.Class.Order
+import           Data.Type.Equality
+import           Proof.Propositional
+import           Data.Singletons.Prelude.Enum
+import           Data.Map                       ( Map )
+import qualified Data.Map                      as Map
+import qualified GHC.TypeLits                  as GTmport
 
 import           Language.Poly.Core2
+import           Language.Poly.Nat
 import           RtDef
 import           CodeGen.Type
 import           CodeGen.Data
@@ -41,6 +50,117 @@ data Pipe a (b  :: Type) =
     }
 
 type ArrowPipe a b = Nat -> Pipe a b
+
+swapAway
+  :: (Serialise a)
+  => Proxy a
+  -> SNat n
+  -> Core ((a, a) -> a)
+  -> ArrowPipe (Tree ( 'S n) a) (Tree n a)
+swapAway proxy n func startRole = case (proofA, proofB) of
+  (SDict, SDict) -> Pipe { start = (startRole, singleType)
+                         , cont  = sender
+                         , env   = myEnv
+                         , end   = (endRole, singleType)
+                         }
+ where
+  sender = case proofA of
+    SDict -> toAProcRTFunc $ sendHelper proxy n (startRole + 1)
+  endRole   = toEnum $ (fromEnum (startRole + 1)) + totalNode + 1
+
+  totalNode = (2 ^ (sNatToInt n :: Integer) :: Int)
+
+  recvProc  = case proofB of
+    SDict -> toAProc $ receiveHelper proxy n (startRole + 1)
+  (proofA, proofB) = (getSDict (SS n) proxy, getSDict n proxy)
+
+  mkProc           = toAProc $ do
+    x <- recv' startRole
+    _ <- send' endRole (func :$ x)
+    return (Lit ())
+  roles =
+    fmap toEnum
+      $ [fromEnum $ startRole + 1 .. (fromEnum (startRole + 1)) + totalNode]
+
+  myEnv =
+    Map.insert endRole recvProc $ Map.fromAscList $ zip roles (repeat mkProc)
+
+receiveHelper :: (Serialise a) => Proxy a -> SNat n -> Nat -> ProcRT (Tree n a)
+receiveHelper _ SZ startRole = do
+  x <- recv' startRole
+  return x
+receiveHelper a (SS n) startRole = do
+  x <- receiveHelper a n startRole
+  y <- receiveHelper a n (toEnum startRoleRight)
+  return (Pair x y)
+  where startRoleRight = (fromEnum startRole) + (sNatToInt n)
+
+sendHelper
+  :: (Serialise a)
+  => Proxy a
+  -> SNat n
+  -> Nat
+  -> Core (Tree n a, Tree n a)
+  -> ProcRT ()
+sendHelper _ SZ startRole x = do
+  _ <- send' startRole x
+  return (Lit ())
+sendHelper a n startRole x = foldl1 (>>) sendAction
+ where
+  leftNodes = case getSDict n a of
+    SDict -> getNodesCore a n (Fst :$ x)
+  rightNodes = case getSDict n a of
+    SDict -> getNodesCore a n (Snd :$ x)
+  pairNodes   = zipWith Pair leftNodes rightNodes
+  senderNodes = zip [fromEnum startRole ..] pairNodes
+  sendAction  = fmap
+    (\(role, val) -> send' (toEnum role) val >> return (Lit ()))
+    senderNodes
+
+getNodesCore
+  :: (Serialise a) => Proxy a -> SNat n -> Core (Tree n a) -> [Core a]
+getNodesCore proxy n x = case minusNilpotent n of
+  Refl -> getLevelsCore (leqRefl n) proxy n n x
+
+getLevelsCore
+  :: (Serialise a)
+  => IsTrue (m <= n)
+  -> Proxy a
+  -> SNat m
+  -> SNat n
+  -> Core (Tree n a)
+  -> [Core (Tree (n - m) a)]
+getLevelsCore _       _     SZ     _ x = [x]
+getLevelsCore witness proxy (SS m) n x = concat
+  $ fmap (getterCore firstProof proxy m n) y
+ where
+  firstProof     = succLeqToLT m n witness
+  secondWitnesss = ltToLeq m n firstProof
+  y              = getLevelsCore secondWitnesss proxy m n x
+
+getterCore
+  :: (Serialise a)
+  => Compare m n :~: 'LT
+  -> Proxy a
+  -> SNat m
+  -> SNat n
+  -> Core (Tree (n - m) a)
+  -> [Core (Tree (n - ( 'S m)) a)]
+getterCore comp proxy m n x = case pred2 comp m n of
+  Refl -> helper gtZeroProof proxy snum x
+ where
+  snum        = sMinus comp n m
+  gtZeroProof = gtZero comp m n
+
+  helper
+    :: (Serialise a)
+    => IsTrue (Zero < n)
+    -> Proxy a
+    -> SNat n
+    -> Core (Tree n a)
+    -> [Core (Tree (Pred n) a)]
+  helper witness proxy a@(SS n1) x = case getSDict n1 proxy of
+    SDict -> [Fst :$ x, Snd :$ x]
 
 pmap
   :: (Serialise a, Serialise b)

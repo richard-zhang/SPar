@@ -20,3 +20,4 @@ import Control.Monad.Free
 import Data.Singletons
 import Language.C.Pretty
 import Language.C
+import Data.Type.Natural
