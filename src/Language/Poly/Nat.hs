@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
@@ -129,3 +130,13 @@ sMinus comp  (SS n) (SS m) = sMinus b n m
     a = cmpSucc m n
     b = a `trans` comp
 sMinus _comp SZ _ = error "not gonna happen"
+
+type family Arity t :: Nat where
+    Arity (i -> o) = 'S (Arity o) 
+    Arity t = 'Z
+
+arity :: SingI (Arity a) => Proxy a -> SNat (Arity a)
+arity _ = sing
+
+intArity :: SingI (Arity a) => Proxy a -> Int
+intArity = sNatToInt . arity

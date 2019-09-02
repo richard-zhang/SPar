@@ -129,7 +129,29 @@ chanActionGeneral isSend channel expr@(Exp _ stype) = case stype of
     cVar (intercalate "_" ["chan", action, "buf"])
       # [channel, ptrExpr, sizeOfDecl $ ty2Decl $ stypeToTypeSpec stype]
 
+isMultiParamFunction :: Core a -> Int
+isMultiParamFunction ((Prim _ _) :$  _) = 1
+isMultiParamFunction (x :$ _y) = if subCount >= 0 then 1 + subCount else subCount
+    where
+      subCount = isMultiParamFunction x
+isMultiParamFunction _ = -1
+
+getCoreArgList :: Core a -> [CExpr]
+getCoreArgList ((Prim _ _) :$ param) = [convertToCExpr (Exp param singleType)]
+getCoreArgList (x :$ param) =
+  getCoreArgList x ++ [convertToCExpr (Exp param singleType)]
+getCoreArgList _ = error "not param wierd"
+
+getFuncName :: Core a -> String
+getFuncName ((Prim x _) :$ _) = x
+getFuncName (x          :$ _) = getFuncName x
+getFuncName _                 = error "not multi-param function"
+
 convertToCExpr :: Exp a -> CExpr
+convertToCExpr (Exp a _) | isMultiParamFunction a > 1 = fromString name # argLists
+  where
+    name = getFuncName a
+    argLists = getCoreArgList a
 convertToCExpr (Exp (expr :: Core a) stype) = case expr of
   Lit x           -> stypeToCExpr stype x
   Var num         -> CVar (internalIdent $ "v" ++ show num) undefNode
@@ -155,21 +177,6 @@ convertToCExpr (Exp (expr :: Core a) stype) = case expr of
   (x :$ subExp) ->
     convertToCExpr (Exp x singleType) # [convertToCExpr (Exp subExp singleType)]
   x -> error $ showDebug x
-
-auxConvert :: Core a -> CExpr
-auxConvert expr = fromString (getFuncName expr) # (getCoreList expr)
- where
-  getFuncName :: Core a -> String
-  getFuncName ((Prim x _) :$ _) = x
-  getFuncName (x          :$ _) = getFuncName x
-  getFuncName _                 = error "not multi-param function"
-
-  getCoreList :: Core a -> [CExpr]
-  getCoreList ((Prim _ _) :$ param) = [convertToCExpr (Exp param singleType)]
-  getCoreList (x :$ param) =
-    getCoreList x ++ [convertToCExpr (Exp param singleType)]
-  getCoreList _ = error "not param wierd"
-
 
 printDebug :: Exp a -> CExpr
 printDebug = debugPrint . samplingCExpr

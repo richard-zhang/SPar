@@ -1,5 +1,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Language.Poly.Core2
     ( Core(..)
     , Serialise
@@ -44,7 +46,7 @@ data Core a where
     (:***) :: (Serialise a, Serialise b, Serialise c, Serialise d) => Core (a -> c) -> Core (b -> d) -> Core ((a, b) -> (c, d))
     (:>>>) :: (Serialise b) => Core (a -> b) -> Core (b -> c) -> Core (a -> c)
 
-    ZipWithTree :: (Serialise a) => SNat n -> Core ((a, a) -> a) -> Core ((Tree ('S n) a) -> a)
+    ZipWithTree :: (Serialise a) => SNat n -> Core ((a, a) -> a) -> Core ((Tree ('S n) a) -> (Tree n a))
 
 showDebug :: Core a -> String
 showDebug (x :&&& y) =
@@ -85,3 +87,6 @@ extractParamType _ = Proxy
 interp :: Core t -> t
 interp Unit    = ()
 interp (Lit x) = x
+
+-- getCoreArity :: Core a -> Int
+-- getCoreArity (_x :: Core a) = intArity (Proxy @a)

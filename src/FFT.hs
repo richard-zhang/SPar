@@ -68,9 +68,10 @@ czwT
            (  (Tree n [Complex Float], Tree n [Complex Float])
            -> Tree n [Complex Float]
            )
-czwT SZ     f = f
-czwT (SS n) f = case getSDict n (Proxy :: Proxy [Complex Float]) of
-    SDict -> Swap :>>> (czwT n f :*** czwT n f)
+czwT n f = ZipWithTree n f
+-- czwT SZ     f = f
+-- czwT (SS n) f = case getSDict n (Proxy :: Proxy [Complex Float]) of
+    -- SDict -> Swap :>>> (czwT n f :*** czwT n f)
 
 testf :: Core ((Int, Int) -> Int)
 testf = Prim "test" undefined
@@ -148,6 +149,7 @@ c2a :: (Serialise a, Serialise b) => Core (a -> b) -> ArrowPipe a b
 c2a (x :>>> y) = (c2a x) >>> (c2a y)
 c2a (x :*** y) = (c2a x) *** (c2a y)
 c2a (x :&&& y) = (c2a x) &&& (c2a y)
+c2a (ZipWithTree n f) = swapAway (Proxy :: Proxy a) n f
 c2a x          = arr x
 
 srcData2 :: (Tree ( 'S ( 'S 'Z)) Int, Tree ( 'S ( 'S 'Z)) Int)
@@ -157,3 +159,8 @@ srcData1 :: (Tree ( 'S 'Z) Int, Tree ( 'S 'Z) Int)
 srcData1 = ((1, 2), (3, 4))
 
 codegenZWT = codeGenTest srcData1 (c2a (testzwT @1)) "codegen/test"
+
+fftData1 :: [Complex Float]
+fftData1 = take 4 $ repeat (1, 1)
+
+myfft = codeGenTest fftData1 cfft4Core "benchmark/fft/test"
