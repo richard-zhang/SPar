@@ -20,13 +20,6 @@ import           Data.Kind
 import           Data.Type.Natural
 import           Type.Reflection
 import           Data.Maybe
-import           Data.Type.Natural.Class.Order
-import           Data.Type.Equality
-import           Proof.Propositional
-import           Data.Singletons.Prelude.Enum
-import           Data.Map                       ( Map )
-import qualified Data.Map                      as Map
-import qualified GHC.TypeLits                  as GTmport
 
 import           Language.Poly.Core2
 import           Language.Poly.Nat
@@ -52,13 +45,14 @@ data Pipe a (b  :: Type) =
 type ArrowPipe a b = Nat -> Pipe a b
 
 swapAway
-  :: (Serialise a)
+  :: (Serialise a, Serialise b)
   => Proxy a
+  -> Proxy b
   -> SNat n
-  -> Core ((a, a) -> a)
-  -> ArrowPipe (Tree ( 'S n) a) (Tree n a)
-swapAway proxy n func startRole = case (proofA, proofB) of
-  (SDict, SDict) -> Pipe { start = (startRole, singleType)
+  -> Core ((a, a) -> b)
+  -> ArrowPipe (Tree ( 'S n) a) (Tree n b)
+swapAway proxy proxy2 n func startRole = case (proofA, proofB, proofC) of
+  (SDict, SDict, SDict) -> Pipe { start = (startRole, singleType)
                          , cont  = sender
                          , env   = myEnv
                          , end   = (endRole, singleType)
@@ -71,8 +65,8 @@ swapAway proxy n func startRole = case (proofA, proofB) of
   totalNode = (2 ^ (sNatToInt n :: Integer) :: Int)
 
   recvProc  = case proofB of
-    SDict -> toAProc $ receiveHelper proxy n (startRole + 1)
-  (proofA, proofB) = (getSDict (SS n) proxy, getSDict n proxy)
+    SDict -> toAProc $ receiveHelper proxy2 n (startRole + 1)
+  (proofA, proofB, proofC) = (getSDict (SS n) proxy, getSDict n proxy2, getSDict n proxy2)
 
   mkProc           = toAProc $ do
     x <- recv' startRole
@@ -116,51 +110,6 @@ sendHelper a n startRole x = foldl1 (>>) sendAction
   sendAction  = fmap
     (\(role, val) -> send' (toEnum role) val >> return (Lit ()))
     senderNodes
-
-getNodesCore
-  :: (Serialise a) => Proxy a -> SNat n -> Core (Tree n a) -> [Core a]
-getNodesCore proxy n x = case minusNilpotent n of
-  Refl -> getLevelsCore (leqRefl n) proxy n n x
-
-getLevelsCore
-  :: (Serialise a)
-  => IsTrue (m <= n)
-  -> Proxy a
-  -> SNat m
-  -> SNat n
-  -> Core (Tree n a)
-  -> [Core (Tree (n - m) a)]
-getLevelsCore _       _     SZ     _ x = [x]
-getLevelsCore witness proxy (SS m) n x = concat
-  $ fmap (getterCore firstProof proxy m n) y
- where
-  firstProof     = succLeqToLT m n witness
-  secondWitnesss = ltToLeq m n firstProof
-  y              = getLevelsCore secondWitnesss proxy m n x
-
-getterCore
-  :: (Serialise a)
-  => Compare m n :~: 'LT
-  -> Proxy a
-  -> SNat m
-  -> SNat n
-  -> Core (Tree (n - m) a)
-  -> [Core (Tree (n - ( 'S m)) a)]
-getterCore comp proxy m n x = case pred2 comp m n of
-  Refl -> helper gtZeroProof proxy snum x
- where
-  snum        = sMinus comp n m
-  gtZeroProof = gtZero comp m n
-
-  helper
-    :: (Serialise a)
-    => IsTrue (Zero < n)
-    -> Proxy a
-    -> SNat n
-    -> Core (Tree n a)
-    -> [Core (Tree (Pred n) a)]
-  helper witness proxy a@(SS n1) x = case getSDict n1 proxy of
-    SDict -> [Fst :$ x, Snd :$ x]
 
 pmap
   :: (Serialise a, Serialise b)
@@ -681,7 +630,7 @@ bind4Force :: AProcRT -> AProcRTFunc a -> AProcRT
 bind4Force (AProcRT ty proc) (AProcRTFunc ty2 (func :: Core c -> ProcRT b)) =
   case ty `eqTypeRep` rep of
     Just HRefl -> AProcRT ty2 (proc >>= forcedEval' >>= func)
-    Nothing    -> error "AProcRT and AProcRTFunc are not compatible"
+    Nothing    -> error $ show ty ++ " " ++ show rep ++ " AProcRT and AProcRTFunc are not compatible"
   where rep = typeRep :: TypeRep c
 
 bind5 :: [Nat] -> AProcRTFunc a -> AProcRTFunc b -> AProcRTFunc (Either a b)

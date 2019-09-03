@@ -41,6 +41,13 @@ caddc = Prim "addc" undefined
 csubc :: Core (([Complex Float], [Complex Float]) -> [Complex Float])
 csubc = Prim "subc" undefined
 
+caddAndPlus
+    :: Core
+           (  ([Complex Float], [Complex Float])
+           -> ([Complex Float], [Complex Float])
+           )
+caddAndPlus = Prim "addSub" undefined
+
 caddPadding :: SNat n -> Core ([a] -> [a])
 caddPadding _ = Prim "addPadding" undefined
 
@@ -69,6 +76,9 @@ czwT
            -> Tree n [Complex Float]
            )
 czwT n f = ZipWithTree n f
+-- czwT SZ     f = f
+-- czwT (SS n) f = case getSDict n (Proxy :: Proxy [Complex Float]) of
+    -- SDict -> Swap :>>> (czwT n f :*** czwT n f)
 
 combinePlusMinus
     :: SNat n
@@ -76,11 +86,16 @@ combinePlusMinus
            (  (Tree n [Complex Float], Tree n [Complex Float])
            -> (Tree n [Complex Float], Tree n [Complex Float])
            )
-combinePlusMinus x = case getSDict x (Proxy :: Proxy [Complex Float]) of
-    SDict -> (czwT x caddc :&&& czwT x csubc)
--- czwT SZ     f = f
--- czwT (SS n) f = case getSDict n (Proxy :: Proxy [Complex Float]) of
-    -- SDict -> Swap :>>> (czwT n f :*** czwT n f)
+-- combinePlusMinus x = case getSDict x (Proxy :: Proxy [Complex Float]) of
+    -- SDict -> (czwT x caddc :&&& czwT x csubc)
+combinePlusMinus x =
+    case
+            ( getSDict x (Proxy :: Proxy [Complex Float])
+            , getSDict x (Proxy :: Proxy ([Complex Float], [Complex Float]))
+            )
+        of
+            (SDict, SDict) -> (ZipWithTree x caddAndPlus)
+                :>>> splitTree x (Proxy :: Proxy [Complex Float])
 
 testf :: Core ((Int, Int) -> Int)
 testf = Prim "test" undefined
@@ -151,11 +166,12 @@ opt (x :&&& y) = opt x :&&& opt y
 opt x          = x
 
 c2a :: (Serialise a, Serialise b) => Core (a -> b) -> ArrowPipe a b
-c2a (x           :>>> y) = (c2a x) >>> (c2a y)
-c2a (x           :*** y) = (c2a x) *** (c2a y)
-c2a (x           :&&& y) = (c2a x) &&& (c2a y)
-c2a (ZipWithTree n    f) = swapAway (Proxy :: Proxy a) n f
-c2a x                    = arr x
+c2a (x :>>> y) = (c2a x) >>> (c2a y)
+c2a (x :*** y) = (c2a x) *** (c2a y)
+c2a (x :&&& y) = (c2a x) &&& (c2a y)
+c2a (ZipWithTree n f) =
+    swapAway Proxy Proxy n f
+c2a x = arr x
 
 srcData2 :: (Tree ( 'S ( 'S 'Z)) Int, Tree ( 'S ( 'S 'Z)) Int)
 srcData2 = (((1, 2), (3, 4)), ((5, 6), (7, 8)))

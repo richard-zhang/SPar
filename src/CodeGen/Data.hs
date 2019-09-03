@@ -174,6 +174,7 @@ convertToCExpr (Exp (expr :: Core a) stype) = case expr of
   Pair l r -> productCExp (Exp l $ getLeftProdType stype)
                           (Exp r $ getRightProdType stype)
                           stype
+  (Lift f :$ subExp) -> convertToCExpr (Exp (f subExp) stype)
   (x :$ subExp) ->
     convertToCExpr (Exp x singleType) # [convertToCExpr (Exp subExp singleType)]
   x -> error $ showDebug x
@@ -323,7 +324,17 @@ dataStructDecl (ASingleType s@(ListSingleType stype)) = csu2
           [(Just $ ptr $ fromString $ fromString "value", Nothing, Nothing)]
           undefNode
   ]
-dataStructDecl _ = undefined
+dataStructDecl (ASingleType (FuncSingleType _ _)) = error "func type is wrong"
+dataStructDecl (ASingleType (NumSingleType _)) = error "number type is wrong"
+dataStructDecl (ASingleType LabelSingleType) = error "label type is wrong"
+dataStructDecl (ASingleType UnitSingleType) = error "unit tyep is wrong"
+
+isComposedType :: ASingleType -> Bool
+isComposedType (ASingleType (FuncSingleType _ _)) = False
+isComposedType (ASingleType (NumSingleType _)) = False
+isComposedType (ASingleType LabelSingleType) = False
+isComposedType (ASingleType UnitSingleType) = False
+isComposedType _ = True
 
 sumCExp :: Either (Exp a) (Exp b) -> SingleType (Either a b) -> CExpr
 sumCExp expr s@(SumSingleType _ _) = case expr of

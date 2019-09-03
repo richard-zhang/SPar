@@ -104,8 +104,8 @@ codeGenCombinedWithEntry2 main instrs st entry@EntryRole {..} =
     sumTypeDecls =
         fmap (CDeclExt . dataStructDecl)
             $ Set.toList
-            $ Set.insert (ASingleType endType)
-            $ Set.insert (ASingleType startType)
+            $ (if isComposedType (ASingleType endType) then Set.insert (ASingleType endType) else id)
+            $ (if isComposedType (ASingleType startType) then Set.insert (ASingleType startType) else id)
             $ dataStructCollect st
     entryFuncDecl =
         [CFDefExt $ entryFunc entry sendChanCid recvChanCid cid roles]

@@ -21,20 +21,29 @@ static inline Prod_float_float plus(Prod_float_float a, Prod_float_float b) {
     return (Prod_float_float) {a.fst + b.fst, a.snd + b.snd};
 }
 
-static inline List_Prod_float_float addc(Prod_List_Prod_float_float_List_Prod_float_float a) {
+static inline Prod_List_Prod_float_float_List_Prod_float_float addSub(Prod_List_Prod_float_float_List_Prod_float_float a) {
     size_t size = a.fst.size;
-    for (size_t i = 0; i < size; i++) {
-        a.fst.value[i] = minus(a.fst.value[i], a.snd.value[i]);
-    }
-    return a.fst;
+    Prod_float_float *tmp = (Prod_float_float *) malloc(sizeof(Prod_float_float) * size);
+    List_Prod_float_float tmpLeft = {size, tmp};
+    Prod_List_Prod_float_float_List_Prod_float_float ret = {addc(a.fst, a.snd), subc(tmpLeft, a.snd)};
+    free(tmp);
+    return ret;
 }
 
-static inline List_Prod_float_float subc(Prod_List_Prod_float_float_List_Prod_float_float a) {
-    size_t size = a.fst.size;
+static inline List_Prod_float_float addc(List_Prod_float_float a, List_Prod_float_float b) {
+    size_t size = a.size;
     for (size_t i = 0; i < size; i++) {
-        a.fst.value[i] = plus(a.fst.value[i], a.snd.value[i]);
+        a.value[i] = plus(a.value[i], b.value[i]);
     }
-    return a.fst;
+    return a;
+}
+
+static inline List_Prod_float_float subc(List_Prod_float_float a, List_Prod_float_float b) {
+    size_t size = a.size;
+    for (size_t i = 0; i < size; i++) {
+        b.value[i] = minus(a.value[i], b.value[i]);
+    }
+    return b;
 }
 
 static inline List_Prod_float_float addPadding(List_Prod_float_float a) {
