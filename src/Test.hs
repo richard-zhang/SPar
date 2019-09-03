@@ -13,7 +13,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE GADTs #-}
-module Test () where
+module Test where
 
 import Control.Arrow
 import Data.Complex
@@ -283,8 +283,12 @@ fastFourier :: forall n. (KnownNat n, IsSing (FromNat n))
             => [Complex Float] -> [Complex Float]
 fastFourier = fastFourierR (sing :: SINat (FromNat n))
 
+fft4core = fastFourier @2
 fft8core = fastFourier @3
 fft16core = fastFourier @4
+
+fftSrcData :: [Complex Float]
+fftSrcData = [1, 1, 1, 1, 0, 0, 0, 0]
 
 type family ToNat (i :: INat) :: Nat where
   ToNat 'Z = 0

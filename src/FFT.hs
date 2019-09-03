@@ -69,6 +69,15 @@ czwT
            -> Tree n [Complex Float]
            )
 czwT n f = ZipWithTree n f
+
+combinePlusMinus
+    :: SNat n
+    -> Core
+           (  (Tree n [Complex Float], Tree n [Complex Float])
+           -> (Tree n [Complex Float], Tree n [Complex Float])
+           )
+combinePlusMinus x = case getSDict x (Proxy :: Proxy [Complex Float]) of
+    SDict -> (czwT x caddc :&&& czwT x csubc)
 -- czwT SZ     f = f
 -- czwT (SS n) f = case getSDict n (Proxy :: Proxy [Complex Float]) of
     -- SDict -> Swap :>>> (czwT n f :*** czwT n f)
@@ -112,17 +121,13 @@ cfft (SS x) = case getSDict x (Proxy :: Proxy [Complex Float]) of
     SDict ->
         (cfft x :*** cfft x)
             :>>> (Id :*** cfmapTIx x (cmulexp :$ (Lit p2sx)) 0)
-            :>>> (czwT x caddc :&&& czwT x csubc)
+            :>>> combinePlusMinus x
         where p2sx = 2 ^ sNatToInt (SS x)
 
 cfastFourierR :: SNat n -> Core ([Complex Float] -> [Complex Float])
 cfastFourierR cores = case getSDict cores (Proxy :: Proxy [Complex Float]) of
     SDict ->
-        (    caddPadding cores
-        :>>> csplitL cores
-        :>>> cfft cores
-        :>>> cmerge cores
-        )
+        (caddPadding cores :>>> csplitL cores :>>> cfft cores :>>> cmerge cores)
 
 cfastFourier
     :: forall n
@@ -131,7 +136,7 @@ cfastFourier
 cfastFourier = cfastFourierR (sing :: SNat (FromNat n))
 
 cfft4Core :: ArrowPipe [Complex Float] [Complex Float]
-cfft4Core = c2a $ (cfastFourier @1)
+cfft4Core = c2a $ (cfastFourier @2)
 
 opt :: Core (a -> b) -> Core (a -> b)
 opt ((a :>>> b) :>>> c) = opt $ (opt a :>>> (opt b :>>> opt c))
@@ -146,11 +151,11 @@ opt (x :&&& y) = opt x :&&& opt y
 opt x          = x
 
 c2a :: (Serialise a, Serialise b) => Core (a -> b) -> ArrowPipe a b
-c2a (x :>>> y) = (c2a x) >>> (c2a y)
-c2a (x :*** y) = (c2a x) *** (c2a y)
-c2a (x :&&& y) = (c2a x) &&& (c2a y)
-c2a (ZipWithTree n f) = swapAway (Proxy :: Proxy a) n f
-c2a x          = arr x
+c2a (x           :>>> y) = (c2a x) >>> (c2a y)
+c2a (x           :*** y) = (c2a x) *** (c2a y)
+c2a (x           :&&& y) = (c2a x) &&& (c2a y)
+c2a (ZipWithTree n    f) = swapAway (Proxy :: Proxy a) n f
+c2a x                    = arr x
 
 srcData2 :: (Tree ( 'S ( 'S 'Z)) Int, Tree ( 'S ( 'S 'Z)) Int)
 srcData2 = (((1, 2), (3, 4)), ((5, 6), (7, 8)))
@@ -163,4 +168,7 @@ codegenZWT = codeGenTest srcData1 (c2a (testzwT @1)) "codegen/test"
 fftData1 :: [Complex Float]
 fftData1 = take 4 $ repeat (1, 1)
 
-myfft = codeGenTest fftData1 cfft4Core "benchmark/fft/test"
+fftData :: [Complex Float]
+fftData = [(1, 0), (1, 0), (1, 0), (1, 0), (0, 0), (0, 0), (0, 0), (0, 0)]
+
+myfft = codeGenTest fftData cfft4Core "benchmark/fft/test"
