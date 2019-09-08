@@ -16,4 +16,8 @@ typedef struct Prod_Prod_List_Prod_float_float_List_Prod_float_float_Prod_List_P
             Prod_List_Prod_float_float_List_Prod_float_float fst;
             Prod_List_Prod_float_float_List_Prod_float_float snd;
         } Prod_Prod_List_Prod_float_float_List_Prod_float_float_Prod_List_Prod_float_float_List_Prod_float_float;
+typedef struct Prod_Prod_Prod_List_Prod_float_float_List_Prod_float_float_Prod_List_Prod_float_float_List_Prod_float_float_Prod_Prod_List_Prod_float_float_List_Prod_float_float_Prod_List_Prod_float_float_List_Prod_float_float {
+            Prod_Prod_List_Prod_float_float_List_Prod_float_float_Prod_List_Prod_float_float_List_Prod_float_float fst;
+            Prod_Prod_List_Prod_float_float_List_Prod_float_float_Prod_List_Prod_float_float_List_Prod_float_float snd;
+        } Prod_Prod_Prod_List_Prod_float_float_List_Prod_float_float_Prod_List_Prod_float_float_List_Prod_float_float_Prod_Prod_List_Prod_float_float_List_Prod_float_float_Prod_List_Prod_float_float_List_Prod_float_float;
 #endif

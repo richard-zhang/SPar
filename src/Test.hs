@@ -226,6 +226,8 @@ addPadding sz l = l ++ replicate (padding $ length l) 0
 concatenate = uncurry (++)
 
 {- Below should be your prim functions -}
+mulExp :: (RealFloat a1, Integral a2) =>
+            a2 -> Int -> [Complex a1] -> [Complex a1]
 mulExp p2sx i l = zipWith (\k z -> exp' k (p2sx * fromIntegral len) * z) [i * len ..] l
   where
     len = length l
@@ -283,6 +285,7 @@ fastFourier :: forall n. (KnownNat n, IsSing (FromNat n))
             => [Complex Float] -> [Complex Float]
 fastFourier = fastFourierR (sing :: SINat (FromNat n))
 
+fft2core = fastFourier @1
 fft4core = fastFourier @2
 fft8core = fastFourier @3
 fft16core = fastFourier @4

@@ -1,5 +1,6 @@
 module Main where
 import Spar
+import FFT
 
 main :: IO ()
 -- main = codeGenDebug1 False testMergeSort
@@ -12,4 +13,4 @@ main :: IO ()
 -- main = putStrLn "hello, world"
 -- main = benchmarkNewEntry "benchmark" 1 [0,1] [0 .. 2] [2..5] 
 -- main = codeGenTestCompile [(1.0, 1.0), (1.0, 1.0), (1.0, 1.0), (1.0, 1.0)] cfft4Core "benchmark/fft/test"
-main = testZipWith >> return ()
+main = myfft >> return ()

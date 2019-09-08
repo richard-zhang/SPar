@@ -13,8 +13,4 @@ typedef struct Prod_Prod_Prod_int_int_Prod_int_int_Prod_Prod_int_int_Prod_int_in
             Prod_Prod_int_int_Prod_int_int fst;
             Prod_Prod_int_int_Prod_int_int snd;
         } Prod_Prod_Prod_int_int_Prod_int_int_Prod_Prod_int_int_Prod_int_int;
-typedef struct Prod_Prod_Prod_Prod_int_int_Prod_int_int_Prod_Prod_int_int_Prod_int_int_Prod_Prod_Prod_int_int_Prod_int_int_Prod_Prod_int_int_Prod_int_int {
-            Prod_Prod_Prod_int_int_Prod_int_int_Prod_Prod_int_int_Prod_int_int fst;
-            Prod_Prod_Prod_int_int_Prod_int_int_Prod_Prod_int_int_Prod_int_int snd;
-        } Prod_Prod_Prod_Prod_int_int_Prod_int_int_Prod_Prod_int_int_Prod_int_int_Prod_Prod_Prod_int_int_Prod_int_int_Prod_Prod_int_int_Prod_int_int;
 #endif

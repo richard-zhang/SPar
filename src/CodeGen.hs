@@ -36,11 +36,15 @@ data CgRule where
     RIgnore :: CgRule -- ignore the result 
 
 codeGenTest :: Serialise a => a -> ArrowPipe a b -> FilePath -> [Double]
-codeGenTest a arrow path =
-    unsafePerformIO $ codeGenTestCompile a arrow path >> codeGenTestRun path
+codeGenTest a arrow path = unsafePerformIO $ codeGenTestIO a arrow path
+
+codeGenTestIO :: Serialise a => a -> ArrowPipe a b -> FilePath -> IO [Double]
+codeGenTestIO a arrow path =
+    codeGenTestCompile a arrow path >> codeGenTestRun path
 
 codeGenTest2 :: Serialise a => a -> ArrowPipe a b -> FilePath -> IO [Double]
-codeGenTest2 a arrow path = codeGenTestCompile a arrow path >> codeGenTestRun path
+codeGenTest2 a arrow path =
+    codeGenTestCompile a arrow path >> codeGenTestRun path
 
 codeGenTestCompile :: Serialise a => a -> ArrowPipe a b -> FilePath -> IO ()
 codeGenTestCompile a arrow path =

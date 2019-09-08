@@ -9,7 +9,7 @@ testPmap :: [Double]
 testPmap = codeGenTest (1, (1, (1, 1))) (paraMap (arr $ Prim "result" undefined :: ArrowPipe Int Int) ) "benchmark/pmap/test"
 
 testZipWith :: [Double]
-testZipWith = codeGenTest (src, src2) (swapAway proxy sThree padd) "benchmark/zipwith/test"
+testZipWith = codeGenTest (src, src2) (swapAway proxy proxy sThree padd) "benchmark/zipwith/test"
     where
         padd = Prim "result" undefined :: Core ((Int, Int) -> Int)
         proxy = Proxy :: Proxy Int

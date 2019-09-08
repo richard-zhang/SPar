@@ -29,9 +29,6 @@ type Complex a = (a, a)
 cbaseFFT :: Core ([Complex Float] -> [Complex Float])
 cbaseFFT = Prim "baseFFT" undefined
 
-cexp :: Core ((Int, Int) -> Complex Float)
-cexp = Prim "exp" undefined
-
 csplitList :: Core ([a] -> ([a], [a]))
 csplitList = Prim "splitList" undefined
 
@@ -76,9 +73,6 @@ czwT
            -> Tree n [Complex Float]
            )
 czwT n f = ZipWithTree n f
--- czwT SZ     f = f
--- czwT (SS n) f = case getSDict n (Proxy :: Proxy [Complex Float]) of
-    -- SDict -> Swap :>>> (czwT n f :*** czwT n f)
 
 combinePlusMinus
     :: SNat n
@@ -86,8 +80,6 @@ combinePlusMinus
            (  (Tree n [Complex Float], Tree n [Complex Float])
            -> (Tree n [Complex Float], Tree n [Complex Float])
            )
--- combinePlusMinus x = case getSDict x (Proxy :: Proxy [Complex Float]) of
-    -- SDict -> (czwT x caddc :&&& czwT x csubc)
 combinePlusMinus x =
     case
             ( getSDict x (Proxy :: Proxy [Complex Float])
@@ -96,30 +88,6 @@ combinePlusMinus x =
         of
             (SDict, SDict) -> (ZipWithTree x caddAndPlus)
                 :>>> splitTree x (Proxy :: Proxy [Complex Float])
-
-testf :: Core ((Int, Int) -> Int)
-testf = Prim "test" undefined
-
-testSwap :: Core (((a, b), (c, d)) -> ((a, c), (b, d)))
-testSwap = Prim "swap" undefined
-
-testzwT' :: SNat n -> Core ((Tree n Int, Tree n Int) -> Tree n Int)
-testzwT' SZ     = testf
-testzwT' (SS n) = case getSDict n (Proxy :: Proxy Int) of
-    SDict -> testSwap :>>> (testzwT' n :*** testzwT' n)
-
-testzwT
-    :: forall n
-     . (KnownNat n, SingI (FromNat n))
-    => Core
-           (  (Tree (FromNat n) Int, Tree (FromNat n) Int)
-           -> Tree (FromNat n) Int
-           )
-testzwT = testzwT' (sing :: SNat (FromNat n))
-
-testTree :: SNat n -> SingleType (Tree n [Complex Float])
-testTree SZ     = singleType
-testTree (SS x) = ProductSingleType (testTree x) (testTree x)
 
 cfmapTIx
     :: SNat n
@@ -151,7 +119,7 @@ cfastFourier
 cfastFourier = cfastFourierR (sing :: SNat (FromNat n))
 
 cfft4Core :: ArrowPipe [Complex Float] [Complex Float]
-cfft4Core = c2a $ (cfastFourier @2)
+cfft4Core = c2a $ (cfastFourier @3)
 
 opt :: Core (a -> b) -> Core (a -> b)
 opt ((a :>>> b) :>>> c) = opt $ (opt a :>>> (opt b :>>> opt c))
@@ -179,12 +147,10 @@ srcData2 = (((1, 2), (3, 4)), ((5, 6), (7, 8)))
 srcData1 :: (Tree ( 'S 'Z) Int, Tree ( 'S 'Z) Int)
 srcData1 = ((1, 2), (3, 4))
 
-codegenZWT = codeGenTest srcData1 (c2a (testzwT @1)) "codegen/test"
-
 fftData1 :: [Complex Float]
 fftData1 = take 4 $ repeat (1, 1)
 
 fftData :: [Complex Float]
 fftData = [(1, 0), (1, 0), (1, 0), (1, 0), (0, 0), (0, 0), (0, 0), (0, 0)]
 
-myfft = codeGenTest fftData cfft4Core "benchmark/fft/test"
+myfft = codeGenTestIO fftData cfft4Core "benchmark/fft/test"
