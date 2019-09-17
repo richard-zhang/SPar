@@ -4,8 +4,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards #-}
 module Bench where
-import           System.Random
-import           Data.List
 import           Graphics.Rendering.Chart.Easy
 import           Graphics.Rendering.Chart.Backend.Diagrams
 import           System.FilePath
@@ -29,13 +27,19 @@ import           CodeGen
 import           Example.Mergesort
 import           Example.DotProd
 import           Example.Wordcount
-
-class GenRange a where
-    lBound :: a
-    rBound :: a
+import           CodeGen.Data
 
 class RandomGenData a where
     genData :: Int -> Int -> IO a
+
+class GenBenchData a where
+    mkBenchData :: Int -> BenchRawData a
+
+instance (GenBenchData a, GenBenchData b) => GenBenchData (a, b) where
+    mkBenchData len = RPair (mkBenchData len) (mkBenchData len)
+
+instance GenBenchData [a] where
+    mkBenchData len = RList len
 
 instance RandomGenData a => RandomGenData (a, a) where
     genData x y = do
@@ -43,42 +47,10 @@ instance RandomGenData a => RandomGenData (a, a) where
         second <- genData x y
         return (first, second)
 
-instance (GenRange a, Random a) => RandomGenData [a] where
-    genData x y = randomList2 x (mkStdGen y)
+instance RandomGenData [Int] where
+    genData x _y = return [x]
 
-type Benchable a = (Serialise a, RandomGenData a)
-
-randomList2 :: (GenRange a, Random a) => Int -> StdGen -> IO [a]
-randomList2 n _ =
-    newStdGen >>= return . take n . unfoldr (Just . randomR (lBound, rBound))
-
-randomlist :: (GenRange a, Random a) => Int -> StdGen -> [a]
-randomlist n = take n . unfoldr (Just . randomR (lBound, rBound))
-
-getList :: (GenRange a, Random a) => Int -> Int -> [a]
-getList seed size = randomlist (2 ^ size) (mkStdGen seed)
-
-benchmarkStart
-    :: Benchable a
-    => FilePath
-    -> [Int]
-    -> [Int]
-    -> [Int]
-    -> (Int -> ArrowPipe a b)
-    -> IO [(Int, [(Int, (Double, Double))])]
-benchmarkStart path seeds unrolls sizes expr = fmap (zip sizes)
-    $ mapM benchmarkUnRolls sizes
-  where
-    benchmarkUnRolls size =
-        fmap (zip unrolls) $ mapM (benchmarkSeeds size) unrolls
-    benchmarkSeeds size unroll =
-        toBenchData <$> mapM (benchmarkList size unroll) seeds
-    benchmarkList size unroll seed = do
-        x <- genData (2 ^ size) seed
-        codeGenBuildRunBench
-            x
-            (runPipe1 zero (expr unroll))
-            (path </> (intercalate "_" [show size, show unroll, show seed]))
+type Benchable a = (Serialise a, GenBenchData a)
 
 benchmarkCompile
     :: Benchable a
@@ -88,15 +60,15 @@ benchmarkCompile
     -> [Int]
     -> (Int -> ArrowPipe a b)
     -> IO ()
-benchmarkCompile path seeds unrolls sizes expr = mapM_ benchmarkUnRolls sizes
+benchmarkCompile path seeds unrolls sizes aexpr = mapM_ benchmarkUnRolls sizes
   where
     benchmarkUnRolls size = mapM_ (benchmarkSeeds size) unrolls
     benchmarkSeeds size unroll = mapM_ (benchmarkList size unroll) seeds
     benchmarkList size unroll seed = do
-        x <- genData (2 ^ size) seed
-        codeGenBenchCompile
+        let x = mkBenchData (2 ^ size)
+        codeGenCompileWithHeader
             x
-            (runPipe1 zero (expr unroll))
+            (runPipe1 zero (aexpr unroll))
             (path </> (intercalate "_" [show size, show unroll, show seed]))
 
 benchmarkRun :: FilePath -> Int -> [Int] -> [Int] -> [Int] -> IO ()
@@ -312,6 +284,16 @@ runParser =
         <$> switch (long "collect" <> short 'c' <> help "whether to collect")
         <*> switch (long "run" <> short 'r' <> help "whether to run or codegen")
 
+genBenchmarkFile
+    :: Benchable a
+    => FilePath
+    -> [Int]
+    -> [Int]
+    -> (Int -> ArrowPipe a b)
+    -> IO ()
+genBenchmarkFile path unrolls sizes expr =
+    benchmarkEntry path 1 [1] unrolls sizes expr
+
 benchmarkEntry
     :: Benchable a
     => FilePath
@@ -327,10 +309,6 @@ benchmarkEntry path time seeds unrolls sizes expr = execParser opts >>= \x ->
         (False, True ) -> benchmarkRun2 path time seeds unrolls sizes
         (False, False) -> benchmarkCompile path seeds unrolls sizes expr
     where opts = info (runParser <**> helper) mempty
-
-instance GenRange Int where
-    lBound = -2^10
-    rBound = 2^10
 
 benchmarkNewEntry :: FilePath -> Int -> [Int] -> [Int] -> [Int] -> IO ()
 benchmarkNewEntry mainPath time seeds unrolls sizes =

@@ -26,6 +26,7 @@ import           Language.Poly.Nat
 import           RtDef
 import           CodeGen.Type
 import           CodeGen.Data
+import           TypeValue
 
 infixr 3 ***
 infixr 3 &&&
@@ -250,6 +251,17 @@ arrowRight
 arrowRight = (arrowId +++)
 
 -- execution
+localTypes :: [AProcessRT] -> [(Int, STypeV ())]
+localTypes = map helper
+  where
+    helper (AProcRT _ value, role) = (fromEnum role, toSTypeV value)
+
+prettyType :: ArrowPipe a b -> [(Int, String)]
+prettyType = fmap (fmap prettyStype) . runType
+
+runType :: ArrowPipe a b -> [(Int, STypeV ())]
+runType = localTypes . fst . runPipe1 zero 
+
 runPipe :: Nat -> Core a -> (ArrowPipe a b) -> [AProcessRT]
 runPipe start x arrowPipe = runPipe' (arrowPipe start) x
  where
@@ -534,7 +546,7 @@ getProcFromEnv key env =
   fromMaybe (error "proc doesn't exist in env") (Map.lookup key env)
 
 startNat :: Pipe a b -> Nat
-startNat = fst . start
+startNat = fst . start 
 
 endNat :: Pipe a b -> Nat
 endNat = fst . end

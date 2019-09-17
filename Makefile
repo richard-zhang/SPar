@@ -40,5 +40,12 @@ bench:
 	stack exec runghc -- benchmark/$(BNAME)/main.hs -c
 	rm -rf benchmark/$(BNAME)/*_*_*
 
+compile:
+	stack exec runghc -- benchmark/$(BNAME)/main.hs
 
-.PHONY: build clean run cr sr chan cleanB bench
+runall:
+	stack exec -- spar-exe
+	stack exec -- spar-exe -r
+	stack exec -- spar-exe -c
+
+.PHONY: build clean run cr sr chan cleanB bench runall

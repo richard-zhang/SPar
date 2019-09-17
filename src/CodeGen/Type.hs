@@ -17,6 +17,8 @@ import           Data.Complex
 type Serialise a = (Repr a, Show a, Read a)
 type CVal a = Serialise a
 
+type Complex a = (a, a)
+
 -- need to find a way to represent recursive single type 
 data SingleType a where
     NumSingleType :: NumType a -> SingleType a

@@ -107,6 +107,8 @@ select' role var cont1 cont2 = liftF $ Select' role var cont1 cont2 (Lit ())
 branch' :: Serialise c => Nat -> ProcRT c -> ProcRT c -> ProcRT ()
 branch' role left right = liftF $ Branch' role left right (Lit ())
 
+testBroadcast = let a :: Either () () = Left () in selectMulti' [zero, one, two, three] (Lit a) (const $ Pure $ Lit ()) (const $ Pure $ Lit ())
+
 selectMulti'
     :: (Serialise a, Serialise b, Serialise c)
     => [Nat]
@@ -128,6 +130,55 @@ convert' = convert 0
 ignoreOutput :: ProcRT a -> ProcRT ()
 ignoreOutput = (>> return (Lit ()))
 
+prettyStype :: STypeV () -> String
+prettyStype (Pure _) = "end"
+prettyStype (Free (S role v n)) = ("!<" ++ (show $ fromEnum role) ++ "," ++ show v ++ ">.") ++ prettyStype n
+prettyStype (Free (R role v n)) = ("?(" ++ (show $ fromEnum role) ++ "," ++ show v ++ ").") ++ prettyStype n
+prettyStype (Free (Se role a b n)) = ("⊕<" ++ (show $ fromEnum role) ++ "," ++ "{" ++ "L: " ++ prettyStype (a >> Pure ()) ++ ", " ++ "R: " ++ prettyStype (b >> Pure ()) ++ "}>.") ++ prettyStype n
+prettyStype (Free (B role a b n)) = ("&(" ++ (show $ fromEnum role) ++ "," ++ "{" ++ "L: " ++ prettyStype (a >> Pure ()) ++ ", " ++ "R: " ++ prettyStype (b >> Pure ()) ++ "}).")  ++ prettyStype n
+prettyStype (Free (Br role a b n)) = ("Br<" ++ (show $ fmap fromEnum role) ++ "," ++ "{" ++ "L: " ++ prettyStype (a >> Pure ()) ++ ", " ++ "R: " ++ prettyStype (b >> Pure ()) ++ "}>.") ++ prettyStype n
+
+
+toSTypeV :: ProcRT a -> STypeV ()
+toSTypeV (Pure _) = Pure ()
+toSTypeV (Free (Send' r v next)) =
+    Free (S r (T.typeRep $ extractType v) $ toSTypeV next)
+toSTypeV (Free (Recv' r cont)) =
+    Free (R r (T.typeRep $ extractParamType cont) $ toSTypeV (cont $ Var 0))
+toSTypeV (Free (Select' r _ cont1 cont2 next)) = Free
+    (Se r
+        (toSTypeV $ cont1 $ Var 0)
+        (toSTypeV $ cont2 $ Var 0)
+        (toSTypeV $ next)
+    )
+toSTypeV (Free (Branch' r left right next)) =
+    Free (B r (toSTypeV left) (toSTypeV right) (toSTypeV next))
+toSTypeV (Free (BranchCont' r left right cont)) =
+    Free (B r (toSTypeV left) (toSTypeV right) $ toSTypeV (cont $ Var 0))
+toSTypeV (Free (SelectMult' xs value cont1 cont2 cont3)) =
+    Free (Br xs (toSTypeV $ cont1 $ Var 0) (toSTypeV $ cont2 $ Var 0) (toSTypeV $ cont3 $ Var 0))
+-- toSTypeV (Free (SelectMult' [x] value cont1 cont2 cont3)) =
+--     toSTypeV (Free (Select' x value cont1 cont2 (cont3 $ Var 0)))
+-- toSTypeV (Free (SelectMult' (x : xs) value cont1 cont2 cont3)) = toSTypeV
+--     (Free (Select' x value c1 c2 (cont3 $ Var 0)))
+--   where
+--     c1 = const $ Free (SelectMult' xs value cont1 cont2 (\_ -> Pure (Lit ())))
+--     c2 = const $ Free (SelectMult' xs value cont1 cont2 (\_ -> Pure (Lit ())))
+toSTypeV (Free (ForcedEval' _value cont)) = toSTypeV (cont $ Var 0)
+toSTypeV _ = error "undefined stype"
+
+postProcess :: STypeV a -> STypeV ()
+postProcess (Pure _) = Pure ()
+postProcess (Free (S r t next)) = Free (S r t (postProcess next))
+postProcess (Free (R r t next)) = Free (R r t (postProcess next))
+postProcess (Free (B r a b n)) = Free (B r (postProcess a) (postProcess b) (postProcess n))
+postProcess (Free (Se r a b n)) = Free (Se r (postProcess a) (postProcess b) (postProcess n))
+postProcess (Free (Br rs a b next)) = 
+    case rs of
+        [x] -> Free (Se x (postProcess a) (postProcess b) (postProcess next))
+        (r:xs) -> let c1 = Free (Br xs a b next) in postProcess $ Free (Se r c1 c1 $ Pure ())
+        _ -> error "broadcast cannot be empty"
+
 convert :: Integer -> ProcRT a -> STypeV ()
 convert _ (Pure _) = Pure ()
 convert n (Free (Send' r v next)) =
@@ -141,9 +192,25 @@ convert n (Free (Select' r _ cont1 cont2 next)) = Free
         (convert n next)
     )
 convert n (Free (Branch' r left right next)) =
-    Free (B r (convert 0 left) (convert 0 right) (convert n next))
+    Free (Se r (convert 0 left) (convert 0 right) (convert n next))
 convert n (Free (BranchCont' r left right cont)) = Free
-    (B r (convert 0 left) (convert 0 right) $ convert (n + 1) (cont $ Var n))
+    (Se r (convert 0 left) (convert 0 right) $ convert (n + 1) (cont $ Var n))
+-- convert n (Free (SelectMult' xs value cont1 cont2 cont3)) = (Free (Br xs $ convert (n + 1) (cont3 $ Var n)))
+convert n (Free (SelectMult' [x] value cont1 cont2 cont3)) =
+    -- convert (n + 1) (cont3 $ Var n)
+    convert (n + 1) (Free (Select' x value cont1 cont2 (cont3 $ Var n)))
+-- convert n ((Free (SelectMult' (x:xs) (value :: Core (Either b c)) cont1 cont2 (cont3 :: Core d -> ProcRT a))) :: ProcRT a ) = 
+--     convert (n + 1) (Free (Select' x value c1 c2 (cont3 $ Var n)))
+--     where
+--         c1 :: Core b -> ProcRT () = const $ Free (SelectMult' xs value cont1 cont2 (\_ -> Pure (Lit ()))) 
+--         c2 :: Core c -> ProcRT () = const $ Free (SelectMult' xs value cont1 cont2 (\_ -> Pure (Lit ())))
+convert n (Free (SelectMult' (x : xs) value cont1 cont2 cont3)) = convert
+    (n + 1)
+    (Free (Select' x value c1 c2 (cont3 $ Var n)))
+  where
+    c1 = const $ Free (SelectMult' xs value cont1 cont2 (\_ -> Pure (Lit ())))
+    c2 = const $ Free (SelectMult' xs value cont1 cont2 (\_ -> Pure (Lit ())))
+convert n (Free (ForcedEval' _value cont)) = convert (n + 1) (cont $ Var n)
 convert _ _ = undefined
 
 eraseSessionInfo' :: Proc' i j a -> ProcRT a

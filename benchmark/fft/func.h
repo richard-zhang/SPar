@@ -8,6 +8,7 @@
 #include <pthread.h>
 #include <math.h>
 #include <complex.h>
+#include <limits.h>
 #include "data.h"
 
 #define PI (4.0 * atan(1.0))
@@ -43,9 +44,9 @@ static inline double get_time()
 }
 
 static inline void debug(List_Prod_float_float a) {
-    for(size_t i = 0; i < a.size; i++) {
-        printf("%g %g\n", a.value[i].fst, a.value[i].snd);
-    }
+    // for(size_t i = 0; i < a.size; i++) {
+    //     printf("%g %g\n", a.value[i].fst, a.value[i].snd);
+    // }
 }
 
 static inline cplx toComplex(Prod_float_float a) {
@@ -165,5 +166,17 @@ static inline List_Prod_float_float cmulexp(int p2sx, int i, List_Prod_float_flo
     return l;
 }
 
+static inline Prod_float_float* randomList(size_t size) {
+    srand((unsigned int)time(NULL));
+    Prod_float_float *tmp = (Prod_float_float *) malloc(sizeof(Prod_float_float) * size);
+    for (size_t i = 0; i < size; i++) {
+        // float x = (float)rand()/(float)(RAND_MAX/INT_MAX);
+        // float y = (float)rand()/(float)(RAND_MAX/INT_MAX);
+        float x = rand() + rand();
+        float y = rand() + rand();
+        tmp[i] = (Prod_float_float) {x, y};
+    }
+    return tmp;
+}
 #endif
 

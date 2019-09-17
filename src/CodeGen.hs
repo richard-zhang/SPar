@@ -42,13 +42,9 @@ codeGenTestIO :: Serialise a => a -> ArrowPipe a b -> FilePath -> IO [Double]
 codeGenTestIO a arrow path =
     codeGenTestCompile a arrow path >> codeGenTestRun path
 
-codeGenTest2 :: Serialise a => a -> ArrowPipe a b -> FilePath -> IO [Double]
-codeGenTest2 a arrow path =
-    codeGenTestCompile a arrow path >> codeGenTestRun path
-
 codeGenTestCompile :: Serialise a => a -> ArrowPipe a b -> FilePath -> IO ()
 codeGenTestCompile a arrow path =
-    codeGenBenchCompile1 a (runPipe1 zero arrow) path
+    codeGenCompileWithHeader (Plain a) (runPipe1 zero arrow) path
 
 codeGenDebug :: Bool -> [AProcessRT] -> IO ()
 codeGenDebug isDebug xs = codeGenHelper defaultHeaders evalCodeGen xs isDebug
@@ -57,9 +53,9 @@ codeGenDebug1 :: Bool -> ([AProcessRT], EntryRole a b) -> IO ()
 codeGenDebug1 isDebug (xs, entry) =
     codeGenHelper defaultHeaders (evalCodeGen1 entry) xs isDebug
 
-codeGenBenchCompile
-    :: (Serialise a) => a -> ([AProcessRT], EntryRole a b) -> FilePath -> IO ()
-codeGenBenchCompile sourceData (xs, entry) dir =
+codeGenCompileWithoutHeader
+    :: (Serialise a) => BenchRawData a -> ([AProcessRT], EntryRole a b) -> FilePath -> IO ()
+codeGenCompileWithoutHeader sourceData (xs, entry) dir =
     createDirectoryIfMissing True dir
         >> writeSource
         >> codeGenBenchBuildFile dir
@@ -76,9 +72,9 @@ codeGenBenchCompile sourceData (xs, entry) dir =
         ++ fmap ((++ "\"") . ("\"" ++)) ["../data.h", "../func.h"]
         )
 
-codeGenBenchCompile1
-    :: (Serialise a) => a -> ([AProcessRT], EntryRole a b) -> FilePath -> IO ()
-codeGenBenchCompile1 sourceData (xs, entry) dir =
+codeGenCompileWithHeader
+    :: (Serialise a) => (BenchRawData a) -> ([AProcessRT], EntryRole a b) -> FilePath -> IO ()
+codeGenCompileWithHeader sourceData (xs, entry) dir =
     createDirectoryIfMissing True dir
         >> writeSource
         >> writeHeader
@@ -127,16 +123,6 @@ defaultHeaders :: [String]
 defaultHeaders = fmap (\x -> "<" ++ x ++ ".h>")
                       ["stdint", "stdio", "stdlib", "chan", "pthread"]
 
-codeGenBuildRunBench
-    :: Serialise a
-    => a
-    -> ([AProcessRT], EntryRole a b)
-    -> FilePath
-    -> IO Double
-codeGenBuildRunBench sourceData xs path = do
-    codeGenBenchCompile sourceData xs path
-    codeGenBenchRun path
-
 codeGenBenchBuildFile :: FilePath -> IO ()
 codeGenBenchBuildFile path = do
     (rc, _, _) <- readCreateProcessWithExitCode
@@ -145,24 +131,6 @@ codeGenBenchBuildFile path = do
     case rc of
         ExitSuccess -> return ()
         _           -> error "build failed"
-
--- codeGenBenchRun :: FilePath -> IO Double
--- codeGenBenchRun path = do
---     (rc, _, _) <- readCreateProcessWithExitCode
---             (shell $ "make build SRC=" ++ path)
---             []
---     case rc of
---         ExitSuccess -> do
---             (rcC, output, _) <- readCreateProcessWithExitCode
---                 (shell $ "make run SRC=" ++ path)
---                 []
---             case rcC of
---                 ExitSuccess -> (return $ read $ helper output)
---                 _           -> error "runtime error"
---         _ -> error "build failed"
---       where
---         helper input = last $ init $ splitOn "\n" input
---         rmDir = removeDirectoryRecursive path
 
 codeGenBenchRun :: FilePath -> IO Double
 codeGenBenchRun path = do

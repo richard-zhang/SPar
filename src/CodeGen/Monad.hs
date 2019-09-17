@@ -104,8 +104,14 @@ codeGenCombinedWithEntry2 main instrs st entry@EntryRole {..} =
     sumTypeDecls =
         fmap (CDeclExt . dataStructDecl)
             $ Set.toList
-            $ (if isComposedType (ASingleType endType) then Set.insert (ASingleType endType) else id)
-            $ (if isComposedType (ASingleType startType) then Set.insert (ASingleType startType) else id)
+            $ (if isComposedType (ASingleType endType)
+                  then Set.insert (ASingleType endType)
+                  else id
+              )
+            $ (if isComposedType (ASingleType startType)
+                  then Set.insert (ASingleType startType)
+                  else id
+              )
             $ dataStructCollect st
     entryFuncDecl =
         [CFDefExt $ entryFunc entry sendChanCid recvChanCid cid roles]
@@ -140,12 +146,20 @@ codeGenCombined instrs st = CTranslUnit
     funcsCaller = fmap (CFDefExt . pthreadFunc . fst) instrs
 
 initCodeGenState :: CodeGenState
-initCodeGenState = CodeGenState { flagTable         = Map.empty
-                                , varNext           = 0
-                                , chanNext          = 1
-                                , dataStructCollect = Set.empty
-                                , newChanTable      = Map.empty
-                                }
+initCodeGenState = CodeGenState
+    { flagTable         = Map.empty
+    , varNext           = 0
+    , chanNext          = 1
+    , dataStructCollect =
+        Set.fromList
+            [ (ASingleType
+                  (singleType :: SingleType ([Complex Float], [Complex Float]))
+              )
+            , ASingleType (singleType :: SingleType [Complex Float])
+            , ASingleType (singleType :: SingleType (Complex Float))
+            ] -- hack for fft TODO
+    , newChanTable      = Map.empty
+    }
 
 freshChanName :: Monad m => CodeGen m CID
 freshChanName =

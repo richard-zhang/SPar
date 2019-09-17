@@ -16,10 +16,16 @@ import           Data.Type.Natural              ( Nat )
 import           Language.C
 import           Data.IORef
 import           System.IO.Unsafe
+import           Unsafe.Coerce
 
 import           CodeGen.Type
 import           CodeGen.Utils
 import           Language.Poly.Core2
+
+data BenchRawData a where
+  Plain :: a -> BenchRawData a
+  RList :: Int -> BenchRawData [a]
+  RPair :: BenchRawData a -> BenchRawData b -> BenchRawData (a, b)
 
 type CID = Int
 
@@ -130,10 +136,11 @@ chanActionGeneral isSend channel expr@(Exp _ stype) = case stype of
       # [channel, ptrExpr, sizeOfDecl $ ty2Decl $ stypeToTypeSpec stype]
 
 isMultiParamFunction :: Core a -> Int
-isMultiParamFunction ((Prim _ _) :$  _) = 1
-isMultiParamFunction (x :$ _y) = if subCount >= 0 then 1 + subCount else subCount
-    where
-      subCount = isMultiParamFunction x
+isMultiParamFunction ((Prim _ _) :$ _ ) = 1
+isMultiParamFunction (x          :$ _y) = if subCount >= 0
+  then 1 + subCount
+  else subCount
+  where subCount = isMultiParamFunction x
 isMultiParamFunction _ = -1
 
 getCoreArgList :: Core a -> [CExpr]
@@ -148,10 +155,11 @@ getFuncName (x          :$ _) = getFuncName x
 getFuncName _                 = error "not multi-param function"
 
 convertToCExpr :: Exp a -> CExpr
-convertToCExpr (Exp a _) | isMultiParamFunction a > 1 = fromString name # argLists
-  where
-    name = getFuncName a
-    argLists = getCoreArgList a
+convertToCExpr (Exp a _) | isMultiParamFunction a > 1 =
+  fromString name # argLists
+ where
+  name     = getFuncName a
+  argLists = getCoreArgList a
 convertToCExpr (Exp (expr :: Core a) stype) = case expr of
   Lit x           -> stypeToCExpr stype x
   Var num         -> CVar (internalIdent $ "v" ++ show num) undefNode
@@ -325,9 +333,9 @@ dataStructDecl (ASingleType s@(ListSingleType stype)) = csu2
           undefNode
   ]
 dataStructDecl (ASingleType (FuncSingleType _ _)) = error "func type is wrong"
-dataStructDecl (ASingleType (NumSingleType _)) = error "number type is wrong"
-dataStructDecl (ASingleType LabelSingleType) = error "label type is wrong"
-dataStructDecl (ASingleType UnitSingleType) = error "unit tyep is wrong"
+dataStructDecl (ASingleType (NumSingleType _   )) = error "number type is wrong"
+dataStructDecl (ASingleType LabelSingleType     ) = error "label type is wrong"
+dataStructDecl (ASingleType UnitSingleType      ) = error "unit tyep is wrong"
 
 isComposedType :: ASingleType -> Bool
 isComposedType (ASingleType (FuncSingleType _ _)) = False
@@ -376,8 +384,8 @@ emptyMain = fun [intTy] "main" [] mainFuncStat
   mainFuncStat =
     CCompound [] [CBlockStmt $ creturn $ fromIntegral (0 :: Integer)] undefNode
 
-benchMain :: (Repr a) => a -> CExtDecl
-benchMain (sourceData :: a) = CFDefExt
+benchMain :: (Repr a) => BenchRawData a -> CExtDecl
+benchMain (x :: BenchRawData a) = CFDefExt
   $ fun [intTy] "main" [] (CCompound [] statements undefNode)
  where
   stype = singleType :: SingleType a
@@ -393,13 +401,55 @@ benchMain (sourceData :: a) = CFDefExt
         ]
   ret = creturn 0
   statements =
-    (fst $ sourceDataDeclStatements 1 "tmp" "a" stype sourceData)
+    (fst $ case x of
+        (Plain sourceData) ->
+          sourceDataDeclStatements 1 "tmp" "a" stype sourceData
+        _ -> randomDataDeclStatements 1 "tmp" "a" singleType x
+      )
       ++ [ CBlockDecl start
          , CBlockStmt $ CExpr (Just debugPrint) undefNode
          , CBlockDecl end
          , CBlockStmt $ CExpr (Just printTime) undefNode
          , CBlockStmt ret
          ]
+
+-- stypeToTypeRep :: SingleType a -> TypeRep a
+-- stypeToTypeRep 
+randomDataDeclStatements
+  :: Int
+  -> String
+  -> String
+  -> SingleType a
+  -> BenchRawData a
+  -> ([CBlockItem], Int)
+randomDataDeclStatements count tmpName outputName s@(ListSingleType a) (RList len)
+  = ([CBlockDecl tmp, CBlockDecl varA], count)
+ where
+  arrayInit = CInitExpr (cVar "randomList" # [sizeExpr]) undefNode-- initListExprs (fmap (stypeToCExpr a) v)
+  tmp       = CDecl [CTypeSpec $ stypeToTypeSpec a]
+                    [(Just $ ptr $ fromString tmpName, Just arrayInit, Nothing)]
+                    undefNode
+  varA =
+    decl (CTypeSpec $ stypeToTypeSpec s) (fromString outputName) (Just rhs)
+  sizeExpr = (fromIntegral len) :: CExpr
+  rhs      = defCompoundLit
+    (show s)
+    [([], initExp sizeExpr), ([], initExp $ fromString tmpName)]
+randomDataDeclStatements count _tmpName outputName s@(ProductSingleType a b) (RPair fv sv)
+  = (left ++ right ++ [CBlockDecl varA], rightCount)
+ where
+  varLeft  = "aLeft" ++ show count
+  varRight = "aRight" ++ show count
+  (left, leftCount) =
+    randomDataDeclStatements (count + 1) "tmpLeft" varLeft a fv
+  (right, rightCount) =
+    randomDataDeclStatements (leftCount + 1) "tmpRight" varRight b sv
+  varA =
+    decl (CTypeSpec $ stypeToTypeSpec s) (fromString outputName) (Just rhs)
+  rhs = defCompoundLit
+    (show s)
+    [([], initExp $ fromString varLeft), ([], initExp $ fromString varRight)]
+randomDataDeclStatements _ _ _ _ _ = error "not a random data type"
 
 sourceDataDeclStatements
   :: Int -> String -> String -> SingleType a -> a -> ([CBlockItem], Int)
